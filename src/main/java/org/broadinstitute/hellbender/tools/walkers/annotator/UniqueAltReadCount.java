@@ -2,11 +2,7 @@ package org.broadinstitute.hellbender.tools.walkers.annotator;
 
 import com.google.common.collect.ImmutableMap;
 import htsjdk.variant.variantcontext.Allele;
-import htsjdk.variant.variantcontext.Genotype;
-import htsjdk.variant.variantcontext.GenotypeBuilder;
 import htsjdk.variant.variantcontext.VariantContext;
-import htsjdk.variant.vcf.VCFFormatHeaderLine;
-import htsjdk.variant.vcf.VCFHeaderLineType;
 import htsjdk.variant.vcf.VCFInfoHeaderLine;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.broadinstitute.barclay.help.DocumentedFeature;
@@ -62,7 +58,7 @@ public class UniqueAltReadCount extends InfoFieldAnnotation {
         // start position and fragment size
         Map<ImmutablePair<Integer, Integer>, Long> duplicateReadMap = likelihoods.bestAllelesBreakingTies().stream()
                 .filter(ba -> ba.allele.equals(altAllele) && ba.isInformative())
-                .map(ba -> new ImmutablePair<>(ba.read.getStart(), ba.read.getFragmentLength()))
+                .map(ba -> new ImmutablePair<>(ba.evidence.getStart(), ba.evidence.getFragmentLength()))
                 .collect(Collectors.groupingBy(x -> x, Collectors.counting()));
 
         return ImmutableMap.of(KEY, duplicateReadMap.size());

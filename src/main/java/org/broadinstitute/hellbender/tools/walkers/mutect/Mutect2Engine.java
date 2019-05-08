@@ -245,7 +245,7 @@ public final class Mutect2Engine implements AssemblyRegionEvaluator {
 
         final ReadLikelihoods<Haplotype> readLikelihoods = likelihoodCalculationEngine.computeReadLikelihoods(assemblyResult,samplesList,reads).copy(true);
         final Map<GATKRead,GATKRead> readRealignments = AssemblyBasedCallerUtils.realignReadsToTheirBestHaplotype(readLikelihoods, assemblyResult.getReferenceHaplotype(), assemblyResult.getPaddedReferenceLoc(), aligner);
-        readLikelihoods.changeReads(readRealignments);
+        readLikelihoods.changeEvidence(readRealignments);
 
         final CalledHaplotypes calledHaplotypes = genotypingEngine.callMutations(
                 readLikelihoods, assemblyResult, referenceContext, regionForGenotyping.getSpan(), featureContext, givenAlleles, header, haplotypeBAMWriter.isPresent(), emitReferenceConfidence());

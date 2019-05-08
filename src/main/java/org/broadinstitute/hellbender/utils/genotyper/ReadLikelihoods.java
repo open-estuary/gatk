@@ -6,7 +6,6 @@ import htsjdk.variant.variantcontext.Allele;
 import it.unimi.dsi.fastutil.objects.Object2IntArrayMap;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.utils.IndexRange;
 import org.broadinstitute.hellbender.utils.MathUtils;
 import org.broadinstitute.hellbender.utils.Utils;
@@ -30,7 +29,7 @@ import java.util.stream.Stream;
  *
  * @author Valentin Ruano-Rubio &lt;valentin@broadinstitute.org&gt;
  */
-public class ReadLikelihoods<A extends Allele> extends MoleculeLikelihoods<GATKRead, A> {
+public class ReadLikelihoods<A extends Allele> extends AlleleLikelihoods<GATKRead, A> {
     /**
      * Constructs a new read-likelihood collection.
      *
@@ -83,13 +82,13 @@ public class ReadLikelihoods<A extends Allele> extends MoleculeLikelihoods<GATKR
         Utils.validateArg(!Double.isNaN(maximumErrorPerBase) && maximumErrorPerBase > 0.0, "the maximum error per base must be a positive number");
 
         new IndexRange(0, samples.numberOfSamples()).forEach(s -> {
-            final List<GATKRead> sampleReads = readsBySampleIndex.get(s);
+            final List<GATKRead> sampleReads = evidenceBySampleIndex.get(s);
             final List<GATKRead> readsToRemove = IntStream.range(0, sampleReads.size())
                     .filter(r -> readIsPoorlyModelled(s, r, sampleReads.get(r), maximumErrorPerBase))
                     .mapToObj(sampleReads::get)
                     .collect(Collectors.toList());
 
-            removeSampleReads(s, readsToRemove, alleles.numberOfAlleles());
+            removeSampleEvidence(s, readsToRemove, alleles.numberOfAlleles());
         });
     }
 
@@ -131,16 +130,16 @@ public class ReadLikelihoods<A extends Allele> extends MoleculeLikelihoods<GATKR
                 continue;
             }
             if (fraction >= 1.0) {
-                removeSampleReads(s, readsBySampleIndex.get(s), alleleCount);
+                removeSampleEvidence(s, evidenceBySampleIndex.get(s), alleleCount);
             } else {
-                final Map<A,List<GATKRead>> readsByBestAllelesMap = readsByBestAlleleMap(s);
-                removeSampleReads(s, AlleleBiasedDownsamplingUtils.selectAlleleBiasedReads(readsByBestAllelesMap, fraction),alleleCount);
+                final Map<A,List<GATKRead>> readsByBestAllelesMap = evidenceByBestAlleleMap(s);
+                removeSampleEvidence(s, AlleleBiasedDownsamplingUtils.selectAlleleBiasedReads(readsByBestAllelesMap, fraction),alleleCount);
             }
         }
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    public MoleculeLikelihoods<Fragment, A> combineMates() {
+    public AlleleLikelihoods<Fragment, A> combineMates() {
         final int sampleCount = samples.numberOfSamples();
         final double[][][] newLikelihoodValues = new double[sampleCount][][];
         final int alleleCount = alleles.numberOfAlleles();
@@ -150,7 +149,7 @@ public class ReadLikelihoods<A extends Allele> extends MoleculeLikelihoods<GATKR
 
         for (int s = 0; s < sampleCount; s++) {
 
-            final Map<String, List<GATKRead>> readsByName = sampleReads(s).stream().collect(Collectors.groupingBy(GATKRead::getName));
+            final Map<String, List<GATKRead>> readsByName = sampleEvidence(s).stream().collect(Collectors.groupingBy(GATKRead::getName));
 
             final List<Fragment> sampleFragments = readsByName.values().stream().flatMap(fragmentReads -> {
                 if (fragmentReads.size() == 1) {
@@ -176,7 +175,7 @@ public class ReadLikelihoods<A extends Allele> extends MoleculeLikelihoods<GATKR
                 fragmentIndexBySampleIndex[s].put(sampleFragments.get(f), f);
                 for (int a = 0; a < alleleCount; a++) {
                     for (final GATKRead read : sampleFragments.get(f).getReads()) {
-                        final int oldReadIndex = readIndex(s, read);
+                        final int oldReadIndex = evidenceIndex(s, read);
                         newSampleValues[a][f] += oldSampleValues[a][oldReadIndex];
                     }
                 }
@@ -185,7 +184,7 @@ public class ReadLikelihoods<A extends Allele> extends MoleculeLikelihoods<GATKR
         }
 
         // Finally we create the new read-likelihood
-        return new MoleculeLikelihoods<Fragment, A>(
+        return new AlleleLikelihoods<Fragment, A>(
                 alleles,
                 samples,
                 fragmentsBySampleIndex,
@@ -215,7 +214,7 @@ public class ReadLikelihoods<A extends Allele> extends MoleculeLikelihoods<GATKR
         final List<List<GATKRead>> newReadsBySampleIndex = new ArrayList<>(sampleCount);
 
         for (int s = 0; s < sampleCount; s++) {
-            newReadsBySampleIndex.add(new ArrayList<>(readsBySampleIndex.get(s)));
+            newReadsBySampleIndex.add(new ArrayList<>(evidenceBySampleIndex.get(s)));
             for (int a = 0; a < alleleCount; a++) {
                 newLikelihoodValues[s][a] = MathUtils.applyToArrayInPlace(valuesBySampleIndex[s][a].clone(), x -> x * conversionFactor);
             }
@@ -233,9 +232,9 @@ public class ReadLikelihoods<A extends Allele> extends MoleculeLikelihoods<GATKR
         return result;
     }
 
-    public ReadLikelihoods(final MoleculeLikelihoods<GATKRead, A> moleculeLikelihoods) {
-        this(moleculeLikelihoods.alleles, moleculeLikelihoods.samples, moleculeLikelihoods.readsBySampleIndex,
-                moleculeLikelihoods.readIndexBySampleIndex, moleculeLikelihoods.valuesBySampleIndex);
+    public ReadLikelihoods(final AlleleLikelihoods<GATKRead, A> alleleLikelihoods) {
+        this(alleleLikelihoods.alleles, alleleLikelihoods.samples, alleleLikelihoods.evidenceBySampleIndex,
+                alleleLikelihoods.evidenceIndexBySampleIndex, alleleLikelihoods.valuesBySampleIndex);
     }
 
     @Override

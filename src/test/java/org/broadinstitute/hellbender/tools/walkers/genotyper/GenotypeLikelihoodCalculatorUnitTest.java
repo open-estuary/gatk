@@ -62,8 +62,8 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
             for (int i = 0; i < testGenotypeCount; i++) {
                 final GenotypeAlleleCounts genotypeAlleleCounts = calculator.genotypeAlleleCountsAt(i);
                 Assert.assertNotNull(genotypeLikelihoods);
-                final double[] readGenotypeLikelihoods = new double[sampleLikelihoods.numberOfReads()];
-                for (int r = 0; r < sampleLikelihoods.numberOfReads(); r++) {
+                final double[] readGenotypeLikelihoods = new double[sampleLikelihoods.evidenceCount()];
+                for (int r = 0; r < sampleLikelihoods.evidenceCount(); r++) {
                     final double[] compoments = new double[genotypeAlleleCounts.distinctAlleleCount()];
                     for (int ar = 0; ar < genotypeAlleleCounts.distinctAlleleCount(); ar++) {
                         final int a = genotypeAlleleCounts.alleleIndexAt(ar);

@@ -146,7 +146,7 @@ public class AssemblyBasedCallerUtilsUnitTest extends GATKBaseTest {
         LikelihoodMatrix<GATKRead, Haplotype> sampleMatrix = readLikelihoods.sampleMatrix(0);
         for (GATKRead read : reads) {
             //set likelihoods, -1.0 for haplotype read assigned to, -8.0 for all other haplotypes
-            final int readIndex = sampleMatrix.indexOfRead(read);
+            final int readIndex = sampleMatrix.indexOfEvidence(read);
             for (Haplotype haplotype : haplotypesList) {
                 final int haplotypeIndex = sampleMatrix.indexOfAllele(haplotype);
                 if (readHaplotypeMap.get(read) == haplotype) {
@@ -215,7 +215,7 @@ public class AssemblyBasedCallerUtilsUnitTest extends GATKBaseTest {
     @Test(dataProvider = "testAnnotateReadLikelihoodsWithRegionsDataProvider")
     public void testAnnotateReadLikelihoodsWithRegions(ReadLikelihoods<Haplotype> readLikelihoods, final Locatable loc, final Locatable callableLoc) {
         AssemblyBasedCallerUtils.annotateReadLikelihoodsWithRegions(readLikelihoods, callableLoc);
-        for (GATKRead read : readLikelihoods.sampleReads(0)) {
+        for (GATKRead read : readLikelihoods.sampleEvidence(0)) {
             Assert.assertEquals(read.getAttributeAsString(AssemblyBasedCallerUtils.ALIGNMENT_REGION_TAG), loc.toString());
             Assert.assertEquals(read.getAttributeAsString(AssemblyBasedCallerUtils.CALLABLE_REGION_TAG), callableLoc.toString());
         }
@@ -287,7 +287,7 @@ public class AssemblyBasedCallerUtilsUnitTest extends GATKBaseTest {
             LikelihoodMatrix<GATKRead, Allele> sampleMatrix = readLikelihoods.sampleMatrix(0);
             List<String> readAttributeList = new ArrayList<>();
             for (GATKRead read : vcReadsMap.get(vc)) {
-                final int readIndex = sampleMatrix.indexOfRead(read);
+                final int readIndex = sampleMatrix.indexOfEvidence(read);
                 String attribute = contig + ":" + vc.getStart() + "=";
                 if (vc == vcs.get(1)) {
                     attribute += supportedAlleleMap.get(read);
@@ -338,12 +338,12 @@ public class AssemblyBasedCallerUtilsUnitTest extends GATKBaseTest {
 
 
             List<String> initReadAttributes = new ArrayList<>();
-            for (GATKRead read : readLikelihoods.sampleReads(0)) {
+            for (GATKRead read : readLikelihoods.sampleEvidence(0)) {
                 initReadAttributes.add(read.getAttributeAsString(AssemblyBasedCallerUtils.SUPPORTED_ALLELES_TAG));
             }
             AssemblyBasedCallerUtils.annotateReadLikelihoodsWithSupportedAlleles(vc, readLikelihoods);
-            for (int j = 0; j < readLikelihoods.sampleReadCount(0); j++) {
-                GATKRead read = readLikelihoods.sampleReads(0).get(j);
+            for (int j = 0; j < readLikelihoods.sampleEvidenceCount(0); j++) {
+                GATKRead read = readLikelihoods.sampleEvidence(0).get(j);
 
                 String expectedAttribute = (initReadAttributes.get(j) != null ? initReadAttributes.get(j) + ", " : "") + readAttributeList.get(j);
                 Assert.assertEquals(read.getAttributeAsString(AssemblyBasedCallerUtils.SUPPORTED_ALLELES_TAG), expectedAttribute);

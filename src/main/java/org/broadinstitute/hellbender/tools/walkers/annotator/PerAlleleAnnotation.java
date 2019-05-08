@@ -3,7 +3,6 @@ package org.broadinstitute.hellbender.tools.walkers.annotator;
 import com.google.common.collect.ImmutableMap;
 import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.VariantContext;
-import htsjdk.variant.vcf.VCFFormatHeaderLine;
 import htsjdk.variant.vcf.VCFHeaderLineCount;
 import htsjdk.variant.vcf.VCFHeaderLineType;
 import htsjdk.variant.vcf.VCFInfoHeaderLine;
@@ -38,8 +37,8 @@ public abstract class PerAlleleAnnotation extends InfoFieldAnnotation{
                 .collect(Collectors.toMap(a -> a, a -> new ArrayList<>()));
 
         Utils.stream(likelihoods.bestAllelesBreakingTies())
-                .filter(ba -> ba.isInformative() && isUsableRead(ba.read))
-                .forEach(ba -> getValueForRead(ba.read, vc).ifPresent(v -> values.get(ba.allele).add(v)));
+                .filter(ba -> ba.isInformative() && isUsableRead(ba.evidence))
+                .forEach(ba -> getValueForRead(ba.evidence, vc).ifPresent(v -> values.get(ba.allele).add(v)));
 
         final int[] statistics = vc.getAlleles().stream().filter(this::includeAllele).mapToInt(a -> aggregate(values.get(a))).toArray();
         return ImmutableMap.of(getVcfKey(), statistics);

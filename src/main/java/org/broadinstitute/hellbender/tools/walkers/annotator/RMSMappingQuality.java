@@ -8,9 +8,6 @@ import htsjdk.variant.variantcontext.VariantContextBuilder;
 import htsjdk.variant.vcf.VCFConstants;
 import htsjdk.variant.vcf.VCFInfoHeaderLine;
 import htsjdk.variant.vcf.VCFStandardHeaderLines;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.broadinstitute.barclay.argparser.Argument;
 import org.broadinstitute.barclay.help.DocumentedFeature;
 import org.broadinstitute.hellbender.cmdline.ReadFilterArgumentDefinitions;
 import org.broadinstitute.hellbender.engine.ReferenceContext;
@@ -27,8 +24,6 @@ import org.broadinstitute.hellbender.utils.variant.GATKVCFConstants;
 import org.broadinstitute.hellbender.utils.variant.GATKVCFHeaderLines;
 
 import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static org.broadinstitute.hellbender.utils.GATKProtectedVariantContextUtils.getAttributeAsLong;
 import static org.broadinstitute.hellbender.utils.GATKProtectedVariantContextUtils.getAttributeAsLongList;
@@ -91,7 +86,7 @@ public final class RMSMappingQuality extends InfoFieldAnnotation implements Stan
                                                final VariantContext vc,
                                                final ReadLikelihoods<Allele> likelihoods){
         Utils.nonNull(vc);
-        if (likelihoods == null || likelihoods.readCount() == 0) {
+        if (likelihoods == null || likelihoods.evidenceCount() == 0) {
             return Collections.emptyMap();
         }
 
@@ -201,7 +196,7 @@ public final class RMSMappingQuality extends InfoFieldAnnotation implements Stan
         long squareSum = 0;
         long numReadsUsed = 0;
         for (int i = 0; i < likelihoods.numberOfSamples(); i++) {
-            for (final GATKRead read : likelihoods.sampleReads(i)) {
+            for (final GATKRead read : likelihoods.sampleEvidence(i)) {
                 long mq = read.getMappingQuality();
                 if (mq != QualityUtils.MAPPING_QUALITY_UNAVAILABLE) {
                     squareSum += mq * mq;
@@ -217,7 +212,7 @@ public final class RMSMappingQuality extends InfoFieldAnnotation implements Stan
                                         final VariantContext vc,
                                         final ReadLikelihoods<Allele> likelihoods) {
         Utils.nonNull(vc);
-        if (likelihoods == null || likelihoods.readCount() < 1 ) {
+        if (likelihoods == null || likelihoods.evidenceCount() < 1 ) {
             return new HashMap<>();
         }
 
@@ -396,7 +391,7 @@ public final class RMSMappingQuality extends InfoFieldAnnotation implements Stan
         // If there is no depth key, try to compute from the likelihoods
         } else if (likelihoods != null && likelihoods.numberOfAlleles() != 0) {
             for (int i = 0; i < likelihoods.numberOfSamples(); i++) {
-                for (GATKRead read : likelihoods.sampleReads(i)) {
+                for (GATKRead read : likelihoods.sampleEvidence(i)) {
                     if (read.getMappingQuality() != QualityUtils.MAPPING_QUALITY_UNAVAILABLE) {
                         numOfReads++;
                     }

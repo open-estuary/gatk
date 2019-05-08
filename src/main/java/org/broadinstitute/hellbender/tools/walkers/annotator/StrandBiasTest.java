@@ -6,7 +6,6 @@ import htsjdk.variant.variantcontext.GenotypesContext;
 import htsjdk.variant.variantcontext.VariantContext;
 import org.broadinstitute.hellbender.engine.ReferenceContext;
 import org.broadinstitute.hellbender.exceptions.GATKException;
-import org.broadinstitute.hellbender.tools.walkers.mutect.SomaticGenotypingEngine;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.genotyper.ReadLikelihoods;
 import org.broadinstitute.hellbender.utils.pileup.PileupElement;
@@ -43,7 +42,7 @@ public abstract class StrandBiasTest extends InfoFieldAnnotation {
         }
 
         if (likelihoods != null) {
-            if (vc.isSNP() && !likelihoods.hasFilledLikelihoods() && (likelihoods.readCount() != 0)) {
+            if (vc.isSNP() && !likelihoods.hasFilledLikelihoods() && (likelihoods.evidenceCount() != 0)) {
                 return calculateAnnotationFromStratifiedContexts(likelihoods.getStratifiedPileups(vc), vc);
             }
 
@@ -157,7 +156,7 @@ public abstract class StrandBiasTest extends InfoFieldAnnotation {
             final int[] sampleTable = new int[ARRAY_SIZE];
             likelihoods.bestAllelesBreakingTies(sample).stream()
                     .filter(ba -> ba.isInformative())
-                    .forEach(ba -> updateTable(sampleTable, ba.allele, ba.read, ref, allAlts));
+                    .forEach(ba -> updateTable(sampleTable, ba.allele, ba.evidence, ref, allAlts));
             if (passesMinimumThreshold(sampleTable, minCount)) {
                 copyToMainTable(sampleTable, table);
             }

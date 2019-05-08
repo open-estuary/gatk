@@ -465,7 +465,7 @@ public class HaplotypeCallerGenotypingEngine extends GenotypingEngine<StandardCa
         // Otherwise (else part) we need to do it again.
         if (hcArgs.useFilteredReadMapForAnnotations || !configuration.isSampleContaminationPresent()) {
             readAlleleLikelihoodsForAnnotations = readAlleleLikelihoodsForGenotyping;
-            readAlleleLikelihoodsForAnnotations.filterToOnlyOverlappingReads(loc);
+            readAlleleLikelihoodsForAnnotations.filterToOnlyOverlappingEvidence(loc);
         } else {
             readAlleleLikelihoodsForAnnotations = readHaplotypeLikelihoods.marginalize(alleleMapper, loc);
             if (emitReferenceConfidence) {
@@ -481,7 +481,7 @@ public class HaplotypeCallerGenotypingEngine extends GenotypingEngine<StandardCa
         // right after a few lines of code below.
         final Map<String, List<GATKRead>> overlappingFilteredReads = overlappingFilteredReads(perSampleFilteredReadList, loc);
 
-        readAlleleLikelihoodsForAnnotations.addReads(overlappingFilteredReads,0);
+        readAlleleLikelihoodsForAnnotations.addEvidence(overlappingFilteredReads,0);
 
         return readAlleleLikelihoodsForAnnotations;
     }

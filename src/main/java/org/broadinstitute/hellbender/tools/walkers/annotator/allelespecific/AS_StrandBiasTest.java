@@ -210,7 +210,7 @@ public abstract class AS_StrandBiasTest extends StrandBiasTest implements Reduci
             final ReducibleAnnotationData<List<Integer>> sampleTable = new AlleleSpecificAnnotationData<>(vc.getAlleles(),null);
             likelihoods.bestAllelesBreakingTies(sample).stream()
                     .filter(ba -> ba.isInformative())
-                    .forEach(ba -> updateTable(ba.allele, ba.read, ref, allAlts, sampleTable));
+                    .forEach(ba -> updateTable(ba.allele, ba.evidence, ref, allAlts, sampleTable));
             if (passesMinimumThreshold(sampleTable, minCount)) {
                 combineAttributeMap(sampleTable, perAlleleValues);
             }

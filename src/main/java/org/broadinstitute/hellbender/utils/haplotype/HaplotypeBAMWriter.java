@@ -15,7 +15,6 @@ import org.broadinstitute.hellbender.utils.genotyper.ReadLikelihoods;
 
 import java.util.Collection;
 import java.util.LinkedHashSet;
-import java.util.function.Function;
 import java.util.Set;
 
 /**
@@ -140,7 +139,7 @@ public class HaplotypeBAMWriter implements AutoCloseable {
 
         final int sampleCount = readLikelihoods.numberOfSamples();
         for (int i = 0; i < sampleCount; i++) {
-            for (final GATKRead read : readLikelihoods.sampleReads(i)) {
+            for (final GATKRead read : readLikelihoods.sampleEvidence(i)) {
                 writeReadAgainstHaplotype(read);
             }
         }

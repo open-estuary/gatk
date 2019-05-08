@@ -244,7 +244,7 @@ public final class PairHMMLikelihoodCalculationEngine implements ReadLikelihoodC
 
     private void computeReadLikelihoods(final LikelihoodMatrix<GATKRead, Haplotype> likelihoods) {
         // Modify the read qualities by applying the PCR error model and capping the minimum base,insertion,deletion qualities
-        final List<GATKRead> processedReads = modifyReadQualities(likelihoods.reads());
+        final List<GATKRead> processedReads = modifyReadQualities(likelihoods.evidence());
 
         final Map<GATKRead, byte[]> gapContinuationPenalties = buildGapContinuationPenalties(processedReads, constantGCP);
 
@@ -307,7 +307,7 @@ public final class PairHMMLikelihoodCalculationEngine implements ReadLikelihoodC
             return;
         }
 
-        final List<GATKRead> reads = likelihoods.reads();
+        final List<GATKRead> reads = likelihoods.evidence();
         final List<Haplotype> haplotypes = likelihoods.alleles();
         for (int i = 0; i < reads.size(); i++) {
             for (int j = 0; j < haplotypes.size(); j++) {

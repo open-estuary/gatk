@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
- * Read-likelihoods container implementation based on integer indexed arrays.
+ * Evidence-likelihoods container implementation based on integer indexed arrays.
  *
  * @param <A> the type of the allele the likelihood makes reference to.
  *
@@ -28,7 +28,7 @@ import java.util.stream.IntStream;
  *
  * @author Valentin Ruano-Rubio &lt;valentin@broadinstitute.org&gt;
  */
-public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> implements SampleList, AlleleList<A> {
+public class AlleleLikelihoods<EVIDENCE extends Locatable, A extends Allele> implements SampleList, AlleleList<A> {
 
     public static final double LOG_10_INFORMATIVE_THRESHOLD = 0.2;
     public static final double NATURAL_LOG_INFORMATIVE_THRESHOLD = MathUtils.log10ToLog(LOG_10_INFORMATIVE_THRESHOLD);
@@ -45,12 +45,12 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
     private static final int MISSING_REF = -1;
 
     /**
-     * Reads by sample index. Each sub array contains reference to the reads of the ith sample.
+     * Evidence by sample index. Each sub array contains reference to the evidence of the ith sample.
      */
-    protected final List<List<EVIDENCE>> readsBySampleIndex;
+    protected final List<List<EVIDENCE>> evidenceBySampleIndex;
 
     /**
-     * Indexed per sample, allele and finally read (within sample).
+     * Indexed per sample, allele and finally evidence (within sample).
      * <p>
      *     valuesBySampleIndex[s][a][r] == lnLk(R_r | A_a) where R_r comes from Sample s.
      * </p>
@@ -78,12 +78,12 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
     private List<String> sampleList;
 
     /**
-     * Maps from each read to its index within the sample.
+     * Maps from each unit of evidence to its index within the sample.
      *
      * <p>In order to save CPU time the indices contained in this array (not the array itself) is
-     * lazily initialized by invoking {@link #readIndexBySampleIndex(int)}.</p>
+     * lazily initialized by invoking {@link #evidenceIndexBySampleIndex(int)}.</p>
      */
-    protected final Object2IntMap<EVIDENCE>[] readIndexBySampleIndex;
+    protected final Object2IntMap<EVIDENCE>[] evidenceIndexBySampleIndex;
 
     /**
      * Index of the reference allele if any, otherwise {@link #MISSING_REF}.
@@ -91,9 +91,9 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
     private int referenceAlleleIndex = MISSING_REF;
 
     /**
-     * Caches the read-list per sample list returned by {@link #sampleReads}
+     * Caches the evidence list per sample list returned by {@link #sampleEvidence}
      */
-    private final List<EVIDENCE>[] readListBySampleIndex;
+    private final List<EVIDENCE>[] evidenceListBySampleIndex;
 
     /**
      * Sample matrices lazily initialized (the elements not the array) by invoking {@link #sampleMatrix(int)}.
@@ -108,28 +108,28 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
     }
 
     /**
-     * Constructs a new read-likelihood collection.
+     * Constructs a new evidence-likelihood collection.
      *
      * <p>
-     *     The initial likelihoods for all allele-read combinations are
+     *     The initial likelihoods for all allele-evidence combinations are
      *     0.
      * </p>
      *
      * @param samples all supported samples in the collection.
      * @param alleles all supported alleles in the collection.
-     * @param reads reads stratified per sample.
+     * @param evidenceBySample evidence stratified per sample.
      *
      * @throws IllegalArgumentException if any of {@code allele}, {@code samples}
-     * or {@code reads} is {@code null},
+     * or {@code evidenceBySample} is {@code null},
      *  or if they contain null values.
      */
     @SuppressWarnings({"rawtypes", "unchecked"})
-    public MoleculeLikelihoods(final SampleList samples,
-                               final AlleleList<A> alleles,
-                               final Map<String, List<EVIDENCE>> reads) {
-        Utils.nonNull(alleles, "allele list cannot be null");
-        Utils.nonNull(samples, "sample list cannot be null");
-        Utils.nonNull(reads, "read map cannot be null");
+    public AlleleLikelihoods(final SampleList samples,
+                             final AlleleList<A> alleles,
+                             final Map<String, List<EVIDENCE>> evidenceBySample) {
+        Utils.nonNull(alleles);
+        Utils.nonNull(samples);
+        Utils.nonNull(evidenceBySample);
 
         this.samples = samples;
         this.alleles = alleles;
@@ -137,14 +137,14 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
         final int sampleCount = samples.numberOfSamples();
         final int alleleCount = alleles.numberOfAlleles();
 
-        readsBySampleIndex = new ArrayList<>(sampleCount);
-        readListBySampleIndex = (List<EVIDENCE>[])new List[sampleCount];
+        evidenceBySampleIndex = new ArrayList<>(sampleCount);
+        evidenceListBySampleIndex = (List<EVIDENCE>[])new List[sampleCount];
         valuesBySampleIndex = new double[sampleCount][][];
         referenceAlleleIndex = findReferenceAllele(alleles);
 
-        readIndexBySampleIndex = new Object2IntMap[sampleCount];
+        evidenceIndexBySampleIndex = new Object2IntMap[sampleCount];
 
-        setupIndexes(reads, sampleCount, alleleCount);
+        setupIndexes(evidenceBySample, sampleCount, alleleCount);
 
         sampleMatrices = (LikelihoodMatrix<EVIDENCE, A>[]) new LikelihoodMatrix[sampleCount];
     }
@@ -152,33 +152,33 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
 
     // Internally used constructor.
     @SuppressWarnings({"unchecked", "rawtypes"})
-    MoleculeLikelihoods(final AlleleList alleles,
-                        final SampleList samples,
-                        final List<List<EVIDENCE>> readsBySampleIndex,
-                        final Object2IntMap<EVIDENCE>[] readIndex,
-                        final double[][][] values) {
+    AlleleLikelihoods(final AlleleList alleles,
+                      final SampleList samples,
+                      final List<List<EVIDENCE>> evidenceBySampleIndex,
+                      final Object2IntMap<EVIDENCE>[] evidenceIndex,
+                      final double[][][] values) {
         this.samples = samples;
         this.alleles = alleles;
-        this.readsBySampleIndex = readsBySampleIndex;
+        this.evidenceBySampleIndex = evidenceBySampleIndex;
         this.valuesBySampleIndex = values;
-        this.readIndexBySampleIndex = readIndex;
+        this.evidenceIndexBySampleIndex = evidenceIndex;
         final int sampleCount = samples.numberOfSamples();
-        this.readListBySampleIndex = (List<EVIDENCE>[])new List[sampleCount];
+        this.evidenceListBySampleIndex = (List<EVIDENCE>[])new List[sampleCount];
 
         referenceAlleleIndex = findReferenceAllele(alleles);
         sampleMatrices = (LikelihoodMatrix<EVIDENCE,A>[]) new LikelihoodMatrix[sampleCount];
     }
 
-    // Add all the indices to alleles, sample and reads in the look-up maps.
-    private void setupIndexes(final Map<String, List<EVIDENCE>> reads, final int sampleCount, final int alleleCount) {
+    // Add all the indices to alleles, sample and evidence in the look-up maps.
+    private void setupIndexes(final Map<String, List<EVIDENCE>> evidenceBySample, final int sampleCount, final int alleleCount) {
         for (int s = 0; s < sampleCount; s++) {
             final String sample = samples.getSample(s);
 
-            final List<EVIDENCE> sampleReads = reads.get(sample);
-            readsBySampleIndex.add(sampleReads == null ? new ArrayList<>(0) : sampleReads);
-            final int sampleReadCount = readsBySampleIndex.get(s).size();
+            final List<EVIDENCE> sampleEvidence = evidenceBySample.get(sample);
+            evidenceBySampleIndex.add(sampleEvidence == null ? new ArrayList<>(0) : sampleEvidence);
+            final int sampleEvidenceCount = evidenceBySampleIndex.get(s).size();
 
-            final double[][] sampleValues = new double[alleleCount][sampleReadCount];
+            final double[][] sampleValues = new double[alleleCount][sampleEvidenceCount];
             valuesBySampleIndex[s] = sampleValues;
         }
     }
@@ -262,24 +262,24 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
     }
 
     /**
-     * Returns the reads that belong to a sample sorted by their index (within that sample).
+     * Returns the units of evidence that belong to a sample sorted by their index (within that sample).
      *
      * @param sampleIndex the requested sample.
-     * @return never {@code null} but perhaps a zero-length array if there is no reads in sample. No element in
+     * @return never {@code null} but perhaps a zero-length array if there is no evidence in sample. No element in
      *   the array will be null.
      */
-    public List<EVIDENCE> sampleReads(final int sampleIndex) {
+    public List<EVIDENCE> sampleEvidence(final int sampleIndex) {
         Utils.validIndex(sampleIndex, samples.numberOfSamples());
-        final List<EVIDENCE> extantList = readListBySampleIndex[sampleIndex];
+        final List<EVIDENCE> extantList = evidenceListBySampleIndex[sampleIndex];
         if (extantList == null) {
-            return readListBySampleIndex[sampleIndex] = Collections.unmodifiableList(readsBySampleIndex.get(sampleIndex));
+            return evidenceListBySampleIndex[sampleIndex] = Collections.unmodifiableList(evidenceBySampleIndex.get(sampleIndex));
         } else {
             return extantList;
         }
     }
 
     /**
-     * Returns a read vs allele likelihood matrix corresponding to a sample.
+     * Returns an evidence vs allele likelihood matrix corresponding to a sample.
      *
      * @param sampleIndex target sample.
      *
@@ -298,8 +298,8 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
     }
 
     /**
-     * Adjusts likelihoods so that for each read, the best allele likelihood is 0 and caps the minimum likelihood
-     * of any allele for each read based on the maximum alternative allele likelihood.
+     * Adjusts likelihoods so that for each unit of evidence, the best allele likelihood is 0 and caps the minimum likelihood
+     * of any allele for each unit of evidence based on the maximum alternative allele likelihood.
      *
      * @param maximumLikelihoodDifferenceCap maximum difference between the best alternative allele likelihood
      *                                           and any other likelihood.
@@ -323,18 +323,18 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
 
         for (int s = 0; s < valuesBySampleIndex.length; s++) {
             final double[][] sampleValues = valuesBySampleIndex[s];
-            final int readCount = readsBySampleIndex.get(s).size();
-            for (int r = 0; r < readCount; r++) {
-                normalizeLikelihoodsPerRead(maximumLikelihoodDifferenceCap, sampleValues, s, r);
+            final int evidenceCount = evidenceBySampleIndex.get(s).size();
+            for (int r = 0; r < evidenceCount; r++) {
+                normalizeLikelihoodsPerEvidence(maximumLikelihoodDifferenceCap, sampleValues, s, r);
             }
         }
     }
 
-    // Does the normalizeLikelihoods job for each read.
-    private void normalizeLikelihoodsPerRead(final double maximumBestAltLikelihoodDifference,
-                                             final double[][] sampleValues, final int sampleIndex, final int readIndex) {
+    // Does the normalizeLikelihoods job for each piece of evidence.
+    private void normalizeLikelihoodsPerEvidence(final double maximumBestAltLikelihoodDifference,
+                                                 final double[][] sampleValues, final int sampleIndex, final int evidenceIndex) {
 
-        final BestAllele bestAlternativeAllele = searchBestAllele(sampleIndex,readIndex,false);
+        final BestAllele bestAlternativeAllele = searchBestAllele(sampleIndex,evidenceIndex,false);
 
         final double worstLikelihoodCap = bestAlternativeAllele.likelihood + maximumBestAltLikelihoodDifference;
 
@@ -342,21 +342,21 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
 
         // Guarantee to be the case by enclosing code.
         for (int a = 0; a < alleleCount; a++) {
-            if (sampleValues[a][readIndex] < worstLikelihoodCap) {
-                sampleValues[a][readIndex] = worstLikelihoodCap;
+            if (sampleValues[a][evidenceIndex] < worstLikelihoodCap) {
+                sampleValues[a][evidenceIndex] = worstLikelihoodCap;
             }
         }
 
     }
 
     /**
-     * Returns the samples in this read-likelihood collection.
+     * Returns the samples in this evidence-likelihood collection.
      * <p>
      *     Samples are sorted by their index in the collection.
      * </p>
      *
      * <p>
-     *     The returned list is an unmodifiable view on the read-likelihoods sample list.
+     *     The returned list is an unmodifiable view on the evidence-likelihoods sample list.
      * </p>
      *
      * @return never {@code null}.
@@ -366,7 +366,7 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
     }
 
     /**
-     * Returns the samples in this read-likelihood collection.
+     * Returns the samples in this evidence-likelihood collection.
      * <p>
      *     Samples are sorted by their index in the collection.
      * </p>
@@ -384,34 +384,34 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
 
 
     /**
-     * Search the best allele for a read.
+     * Search the best allele for a unit of evidence.
      *
      * @param sampleIndex including sample index.
-     * @param readIndex  target read index.
+     * @param evidenceIndex  target evidence index.
      *
      * @param priorities An array of allele priorities (higher values have higher priority) to be used, if present, to break ties for
-     *                   uninformative likelihoods, in which case the read is assigned to the allele with the higher score.
+     *                   uninformative likelihoods, in which case the evidence is assigned to the allele with the higher score.
      * @return never {@code null}, but with {@link BestAllele#allele allele} == {@code null}
      * if non-could be found.
      */
-    private BestAllele searchBestAllele(final int sampleIndex, final int readIndex, final boolean canBeReference, Optional<double[]> priorities) {
+    private BestAllele searchBestAllele(final int sampleIndex, final int evidenceIndex, final boolean canBeReference, Optional<double[]> priorities) {
         final int alleleCount = alleles.numberOfAlleles();
         if (alleleCount == 0 || (alleleCount == 1 && referenceAlleleIndex == 0 && !canBeReference)) {
-            return new BestAllele(sampleIndex, readIndex, -1, Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+            return new BestAllele(sampleIndex, evidenceIndex, -1, Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
         }
 
         final double[][] sampleValues = valuesBySampleIndex[sampleIndex];
         int bestAlleleIndex = canBeReference || referenceAlleleIndex != 0 ? 0 : 1;
 
         int secondBestIndex = 0;
-        double bestLikelihood = sampleValues[bestAlleleIndex][readIndex];
+        double bestLikelihood = sampleValues[bestAlleleIndex][evidenceIndex];
         double secondBestLikelihood = Double.NEGATIVE_INFINITY;
 
         for (int a = bestAlleleIndex + 1; a < alleleCount; a++) {
             if (!canBeReference && referenceAlleleIndex == a) {
                 continue;
             }
-            final double candidateLikelihood = sampleValues[a][readIndex];
+            final double candidateLikelihood = sampleValues[a][evidenceIndex];
             if (candidateLikelihood > bestLikelihood) {
                 secondBestIndex = bestAlleleIndex;
                 bestAlleleIndex = a;
@@ -427,7 +427,7 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
             double bestPriority = priorities.get()[bestAlleleIndex];
             double secondBestPriority = priorities.get()[secondBestIndex];
             for (int a = 0; a < alleleCount; a++) {
-                final double candidateLikelihood = sampleValues[a][readIndex];
+                final double candidateLikelihood = sampleValues[a][evidenceIndex];
                 if (a == bestAlleleIndex || (!canBeReference && a == referenceAlleleIndex) || bestLikelihood - candidateLikelihood > getInformativeThreshold()) {
                     continue;
                 }
@@ -445,45 +445,45 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
             }
         }
 
-        bestLikelihood = sampleValues[bestAlleleIndex][readIndex];
-        secondBestLikelihood = secondBestIndex != bestAlleleIndex ? sampleValues[secondBestIndex][readIndex] : Double.NEGATIVE_INFINITY;
+        bestLikelihood = sampleValues[bestAlleleIndex][evidenceIndex];
+        secondBestLikelihood = secondBestIndex != bestAlleleIndex ? sampleValues[secondBestIndex][evidenceIndex] : Double.NEGATIVE_INFINITY;
 
-        return new BestAllele(sampleIndex, readIndex, bestAlleleIndex, bestLikelihood, secondBestLikelihood);
+        return new BestAllele(sampleIndex, evidenceIndex, bestAlleleIndex, bestLikelihood, secondBestLikelihood);
     }
 
-    private BestAllele searchBestAllele(final int sampleIndex, final int readIndex, final boolean canBeReference) {
-        return searchBestAllele(sampleIndex, readIndex, canBeReference, Optional.empty());
+    private BestAllele searchBestAllele(final int sampleIndex, final int evidenceIndex, final boolean canBeReference) {
+        return searchBestAllele(sampleIndex, evidenceIndex, canBeReference, Optional.empty());
     }
 
-    public void changeReads(final Map<EVIDENCE, EVIDENCE> readRealignments) {
+    public void changeEvidence(final Map<EVIDENCE, EVIDENCE> evidenceReplacements) {
         final int sampleCount = samples.numberOfSamples();
         for (int s = 0; s < sampleCount; s++) {
-            final List<EVIDENCE> sampleReads = readsBySampleIndex.get(s);
-            final Object2IntMap<EVIDENCE> readIndex = readIndexBySampleIndex[s];
-            final int sampleReadCount = sampleReads.size();
-            for (int r = 0; r < sampleReadCount; r++) {
-                final EVIDENCE read = sampleReads.get(r);
-                final EVIDENCE replacement = readRealignments.get(read);
+            final List<EVIDENCE> sampleEvidence = evidenceBySampleIndex.get(s);
+            final Object2IntMap<EVIDENCE> evidenceIndex = evidenceIndexBySampleIndex[s];
+            final int sampleEvidenceCount = sampleEvidence.size();
+            for (int r = 0; r < sampleEvidenceCount; r++) {
+                final EVIDENCE evidence = sampleEvidence.get(r);
+                final EVIDENCE replacement = evidenceReplacements.get(evidence);
                 if (replacement == null) {
                     continue;
                 }
-                sampleReads.set(r, replacement);
-                if (readIndex != null) {
-                    readIndex.remove(read);
-                    readIndex.put(replacement, r);
+                sampleEvidence.set(r, replacement);
+                if (evidenceIndex != null) {
+                    evidenceIndex.remove(evidence);
+                    evidenceIndex.put(replacement, r);
                 }
             }
         }
     }
 
     /**
-     * Add alleles that are missing in the read-likelihoods collection giving all reads a default
+     * Add alleles that are missing in the evidence-likelihoods collection giving all evidence a default
      * likelihood value.
      * @param candidateAlleles the potentially missing alleles.
-     * @param defaultLikelihood the default read likelihood value for that allele.
+     * @param defaultLikelihood the default evidence likelihood value for that allele.
      *
-     * @return {@code true} iff the the read-likelihood collection was modified by the addition of the input alleles.
-     *  So if all the alleles in the input collection were already present in the read-likelihood collection this method
+     * @return {@code true} iff the the evidence-likelihood collection was modified by the addition of the input alleles.
+     *  So if all the alleles in the input collection were already present in the evidence-likelihood collection this method
      *  will return {@code false}.
      *
      * @throws IllegalArgumentException if {@code candidateAlleles} is {@code null} or there is more than
@@ -523,10 +523,10 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
 
         //copy old allele likelihoods and set new allele likelihoods to the default value
         for (int s = 0; s < samples.numberOfSamples(); s++) {
-            final int sampleReadCount = readsBySampleIndex.get(s).size();
+            final int sampleEvidenceCount = evidenceBySampleIndex.get(s).size();
             final double[][] newValuesBySampleIndex = Arrays.copyOf(valuesBySampleIndex[s], newAlleleCount);
             for (int a = oldAlleleCount; a < newAlleleCount; a++) {
-                newValuesBySampleIndex[a] = new double[sampleReadCount];
+                newValuesBySampleIndex[a] = new double[sampleEvidenceCount];
                 if (defaultLikelihood != 0.0) {
                     Arrays.fill(newValuesBySampleIndex[a], defaultLikelihood);
                 }
@@ -538,19 +538,19 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
 
     /**
      * Perform marginalization from an allele set to another (smaller one) taking the maximum value
-     * for each read in the original allele subset.
+     * for each evidence in the original allele subset.
      *
      * @param newToOldAlleleMap map where the keys are the new alleles and the value list the original
      *                          alleles that correspond to the new one.
      * @return never {@code null}. The result will have the requested set of new alleles (keys in {@code newToOldAlleleMap}, and
-     * the same set of samples and reads as the original.
+     * the same set of samples and evidence as the original.
      *
      * @throws IllegalArgumentException is {@code newToOldAlleleMap} is {@code null} or contains {@code null} values,
-     *  or its values contain reference to non-existing alleles in this read-likelihood collection. Also no new allele
+     *  or its values contain reference to non-existing alleles in this evidence-likelihood collection. Also no new allele
      *  can have zero old alleles mapping nor two new alleles can make reference to the same old allele.
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
-    public <B extends Allele> MoleculeLikelihoods<EVIDENCE, B> marginalize(final Map<B, List<A>> newToOldAlleleMap) {
+    public <B extends Allele> AlleleLikelihoods<EVIDENCE, B> marginalize(final Map<B, List<A>> newToOldAlleleMap) {
         Utils.nonNull(newToOldAlleleMap);
 
         final B[] newAlleles = newToOldAlleleMap.keySet().toArray((B[]) new Allele[newToOldAlleleMap.size()]);
@@ -566,19 +566,19 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
 
         final int sampleCount = samples.numberOfSamples();
 
-        final Object2IntMap<EVIDENCE>[] newReadIndexBySampleIndex = new Object2IntMap[sampleCount];
-        final List<List<EVIDENCE>> newReadsBySampleIndex = new ArrayList<>(sampleCount);
+        final Object2IntMap<EVIDENCE>[] newEvidenceIndexBySampleIndex = new Object2IntMap[sampleCount];
+        final List<List<EVIDENCE>> newEvidenceBySampleIndex = new ArrayList<>(sampleCount);
 
         for (int s = 0; s < sampleCount; s++) {
-            newReadsBySampleIndex.add(new ArrayList<>(readsBySampleIndex.get(s)));
+            newEvidenceBySampleIndex.add(new ArrayList<>(evidenceBySampleIndex.get(s)));
         }
 
-        // Finally we create the new read-likelihood
-        final MoleculeLikelihoods<EVIDENCE, B> result = new MoleculeLikelihoods<EVIDENCE, B>(
+        // Finally we create the new evidence-likelihood
+        final AlleleLikelihoods<EVIDENCE, B> result = new AlleleLikelihoods<EVIDENCE, B>(
                 new IndexedAlleleList(newAlleles),
                 samples,
-                newReadsBySampleIndex,
-                newReadIndexBySampleIndex, newLikelihoodValues);
+                newEvidenceBySampleIndex,
+                newEvidenceIndexBySampleIndex, newLikelihoodValues);
         result.isNaturalLog = isNaturalLog;
         return result;
     }
@@ -586,21 +586,21 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
 
     /**
      * Perform marginalization from an allele set to another (smaller one) taking the maximum value
-     * for each read in the original allele subset.
+     * for each unit of evidence in the original allele subset.
      *
      * @param newToOldAlleleMap map where the keys are the new alleles and the value list the original
      *                          alleles that correspond to the new one.
      * @return never {@code null}. The result will have the requested set of new alleles (keys in {@code newToOldAlleleMap}, and
-     * the same set of samples and reads as the original.
+     * the same set of samples and evidence as the original.
      *
-     * @param overlap if not {@code null}, only reads that overlap the location (with unclipping) will be present in
-     *                        the output read-collection.
+     * @param overlap if not {@code null}, only units of evidence that overlap the location (with unclipping) will be present in
+     *                        the output evidence-collection.
      *
      * @throws IllegalArgumentException is {@code newToOldAlleleMap} is {@code null} or contains {@code null} values,
-     *  or its values contain reference to non-existing alleles in this read-likelihood collection. Also no new allele
+     *  or its values contain reference to non-existing alleles in this evidence-likelihood collection. Also no new allele
      *  can have zero old alleles mapping nor two new alleles can make reference to the same old allele.
      */
-    public <B extends Allele> MoleculeLikelihoods<EVIDENCE, B> marginalize(final Map<B, List<A>> newToOldAlleleMap, final Locatable overlap) {
+    public <B extends Allele> AlleleLikelihoods<EVIDENCE, B> marginalize(final Map<B, List<A>> newToOldAlleleMap, final Locatable overlap) {
         Utils.nonNull(newToOldAlleleMap, "the input allele mapping cannot be null");
         if (overlap == null) {
             return marginalize(newToOldAlleleMap);
@@ -615,36 +615,36 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
         // allele does not map to any new; supported but typically not the case.
         final int[] oldToNewAlleleIndexMap = oldToNewAlleleIndexMap(newToOldAlleleMap, oldAlleleCount, newAlleles);
 
-        final int[][] readsToKeep = overlappingReadIndicesBySampleIndex(overlap);
+        final int[][] evidenceToKeep = overlappingEvidenceIndicesBySampleIndex(overlap);
 
-        final double[][][] newLikelihoodValues = marginalLikelihoods(oldAlleleCount, newAlleleCount, oldToNewAlleleIndexMap, readsToKeep);
+        final double[][][] newLikelihoodValues = marginalLikelihoods(oldAlleleCount, newAlleleCount, oldToNewAlleleIndexMap, evidenceToKeep);
 
         final int sampleCount = samples.numberOfSamples();
 
         @SuppressWarnings({"rawtypes","unchecked"})
-        final Object2IntMap<EVIDENCE>[] newReadIndexBySampleIndex = (Object2IntMap<EVIDENCE>[])new Object2IntMap[sampleCount];
-        final List<List<EVIDENCE>> newReadsBySampleIndex = new ArrayList<>(sampleCount);
+        final Object2IntMap<EVIDENCE>[] newEvidenceIndexBySampleIndex = (Object2IntMap<EVIDENCE>[])new Object2IntMap[sampleCount];
+        final List<List<EVIDENCE>> newEvidenceBySampleIndex = new ArrayList<>(sampleCount);
 
         for (int s = 0; s < sampleCount; s++) {
-            final int[] sampleReadsToKeep = readsToKeep[s];
-            final List<EVIDENCE> oldSampleReads = readsBySampleIndex.get(s);
-            final int oldSampleReadCount = oldSampleReads.size();
-            final int newSampleReadCount = sampleReadsToKeep.length;
+            final int[] sampleEvidenceToKeep = evidenceToKeep[s];
+            final List<EVIDENCE> oldSampleEvidence = evidenceBySampleIndex.get(s);
+            final int oldSampleEvidenceCount = oldSampleEvidence.size();
+            final int newSampleEvidenceCount = sampleEvidenceToKeep.length;
 
-            final List<EVIDENCE> newSampleReads = newSampleReadCount == oldSampleReadCount ? new ArrayList<>(oldSampleReads) :
-                    Arrays.stream(sampleReadsToKeep).mapToObj(oldSampleReads::get).collect(Collectors.toList());
-            newReadsBySampleIndex.add(newSampleReads);
+            final List<EVIDENCE> newSampleEvidence = newSampleEvidenceCount == oldSampleEvidenceCount ? new ArrayList<>(oldSampleEvidence) :
+                    Arrays.stream(sampleEvidenceToKeep).mapToObj(oldSampleEvidence::get).collect(Collectors.toList());
+            newEvidenceBySampleIndex.add(newSampleEvidence);
         }
 
-        // Finally we create the new read-likelihood
-        final MoleculeLikelihoods<EVIDENCE, B> result = new MoleculeLikelihoods<>(new IndexedAlleleList<>(newAlleles), samples,
-                newReadsBySampleIndex,
-                newReadIndexBySampleIndex, newLikelihoodValues);
+        // Finally we create the new evidence-likelihood
+        final AlleleLikelihoods<EVIDENCE, B> result = new AlleleLikelihoods<>(new IndexedAlleleList<>(newAlleles), samples,
+                newEvidenceBySampleIndex,
+                newEvidenceIndexBySampleIndex, newLikelihoodValues);
         result.isNaturalLog = isNaturalLog;
         return result;
     }
 
-    private int[][] overlappingReadIndicesBySampleIndex(final Locatable overlap) {
+    private int[][] overlappingEvidenceIndicesBySampleIndex(final Locatable overlap) {
         if (overlap == null) {
             return null;
         }
@@ -654,11 +654,11 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
 
         for (int s = 0; s < sampleCount; s++) {
             buffer.clear();
-            final List<EVIDENCE> sampleReads = readsBySampleIndex.get(s);
-            final int sampleReadCount = sampleReads.size();
-            buffer.ensureCapacity(sampleReadCount);
-            for (int r = 0; r < sampleReadCount; r++) {
-                if (sampleReads.get(r).overlaps(overlap)) {
+            final List<EVIDENCE> sampleEvidence = evidenceBySampleIndex.get(s);
+            final int sampleEvidenceCount = sampleEvidence.size();
+            buffer.ensureCapacity(sampleEvidenceCount);
+            for (int r = 0; r < sampleEvidenceCount; r++) {
+                if (sampleEvidence.get(r).overlaps(overlap)) {
                     buffer.add(r);
                 }
             }
@@ -668,30 +668,30 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
     }
 
     // Calculate the marginal likelihoods considering the old -> new allele index mapping.
-    private double[][][] marginalLikelihoods(final int oldAlleleCount, final int newAlleleCount, final int[] oldToNewAlleleIndexMap, final int[][] readsToKeep) {
+    private double[][][] marginalLikelihoods(final int oldAlleleCount, final int newAlleleCount, final int[] oldToNewAlleleIndexMap, final int[][] evidenceToKeep) {
 
         final int sampleCount = samples.numberOfSamples();
         final double[][][] result = new double[sampleCount][][];
 
         for (int s = 0; s < sampleCount; s++) {
-            final int sampleReadCount = readsBySampleIndex.get(s).size();
+            final int sampleEvidenceCount = evidenceBySampleIndex.get(s).size();
             final double[][] oldSampleValues = valuesBySampleIndex[s];
-            final int[] sampleReadToKeep = readsToKeep == null || readsToKeep[s].length == sampleReadCount ? null : readsToKeep[s];
-            final int newSampleReadCount = sampleReadToKeep == null ? sampleReadCount : sampleReadToKeep.length;
-            final double[][] newSampleValues = result[s] = new double[newAlleleCount][newSampleReadCount];
+            final int[] sampleEvidenceToKeep = evidenceToKeep == null || evidenceToKeep[s].length == sampleEvidenceCount ? null : evidenceToKeep[s];
+            final int newSampleEvidenceCount = sampleEvidenceToKeep == null ? sampleEvidenceCount : sampleEvidenceToKeep.length;
+            final double[][] newSampleValues = result[s] = new double[newAlleleCount][newSampleEvidenceCount];
             // We initiate all likelihoods to -Inf.
             for (int a = 0; a < newAlleleCount; a++) {
                 Arrays.fill(newSampleValues[a], Double.NEGATIVE_INFINITY);
             }
-            // For each old allele and read we update the new table keeping the maximum likelihood.
-            for (int r = 0; r < newSampleReadCount; r++) {
+            // For each old allele and unit of evidence we update the new table keeping the maximum likelihood.
+            for (int r = 0; r < newSampleEvidenceCount; r++) {
                 for (int a = 0; a < oldAlleleCount; a++) {
-                    final int oldReadIndex = newSampleReadCount == sampleReadCount ? r : sampleReadToKeep[r];
+                    final int oldEvidenceIndex = newSampleEvidenceCount == sampleEvidenceCount ? r : sampleEvidenceToKeep[r];
                     final int newAlleleIndex = oldToNewAlleleIndexMap[a];
                     if (newAlleleIndex == -1) {
                         continue;
                     }
-                    final double likelihood = oldSampleValues[a][oldReadIndex];
+                    final double likelihood = oldSampleValues[a][oldEvidenceIndex];
                     if (likelihood > newSampleValues[newAlleleIndex][r]) {
                         newSampleValues[newAlleleIndex][r] = likelihood;
                     }
@@ -727,75 +727,74 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
     }
 
     /**
-     * Add more reads to the collection.
+     * Add more evidence to the collection.
      *
-     * @param readsBySample reads to add.
+     * @param evidenceBySample evidence to add.
      * @param initialLikelihood the likelihood for the new entries.
      *
-     * @throws IllegalArgumentException if {@code readsBySample} is {@code null} or {@code readsBySample} contains
-     *  {@code null} reads, or {@code readsBySample} contains read that are already present in the read-likelihood
+     * @throws IllegalArgumentException if {@code evidenceBySample} is {@code null} or {@code evidenceBySample} contains
+     *  {@code null} evidence, or {@code evidenceBySample} contains evidence already present in the evidence-likelihood
      *  collection.
      */
-    public void addReads(final Map<String,List<EVIDENCE>> readsBySample, final double initialLikelihood) {
-        for (final Map.Entry<String,List<EVIDENCE>> entry : readsBySample.entrySet()) {
+    public void addEvidence(final Map<String,List<EVIDENCE>> evidenceBySample, final double initialLikelihood) {
+        for (final Map.Entry<String,List<EVIDENCE>> entry : evidenceBySample.entrySet()) {
             final String sample = entry.getKey();
-            final List<EVIDENCE> newSampleReads = entry.getValue();
+            final List<EVIDENCE> newSampleEvidence = entry.getValue();
             final int sampleIndex = samples.indexOfSample(sample);
 
             if (sampleIndex == -1) {
-                throw new IllegalArgumentException("input sample " + sample +
-                        " is not part of the read-likelihoods collection");
+                throw new IllegalArgumentException("input sample " + sample + " is not part of the evidence-likelihoods collection");
             }
 
-            if (newSampleReads == null || newSampleReads.isEmpty()) {
+            if (newSampleEvidence == null || newSampleEvidence.isEmpty()) {
                 continue;
             }
 
-            final int sampleReadCount = readsBySampleIndex.get(sampleIndex).size();
-            final int newSampleReadCount = sampleReadCount + newSampleReads.size();
+            final int sampleEvidenceCount = evidenceBySampleIndex.get(sampleIndex).size();
+            final int newSampleEvidenceCount = sampleEvidenceCount + newSampleEvidence.size();
 
-            appendReads(newSampleReads, sampleIndex);
-            extendsLikelihoodArrays(initialLikelihood, sampleIndex, sampleReadCount, newSampleReadCount);
+            appendEvidence(newSampleEvidence, sampleIndex);
+            extendsLikelihoodArrays(initialLikelihood, sampleIndex, sampleEvidenceCount, newSampleEvidenceCount);
         }
     }
 
     // Extends the likelihood arrays-matrices.
-    private void extendsLikelihoodArrays(final double initialLikelihood, final int sampleIndex, final int sampleReadCount, final int newSampleReadCount) {
+    private void extendsLikelihoodArrays(final double initialLikelihood, final int sampleIndex, final int sampleEvidenceCount, final int newSampleEvidenceCount) {
         final double[][] sampleValues = valuesBySampleIndex[sampleIndex];
         final int alleleCount = alleles.numberOfAlleles();
         for (int a = 0; a < alleleCount; a++) {
-            sampleValues[a] = Arrays.copyOf(sampleValues[a], newSampleReadCount);
+            sampleValues[a] = Arrays.copyOf(sampleValues[a], newSampleEvidenceCount);
         }
         if (initialLikelihood != 0.0) // the default array new value.
         {
             for (int a = 0; a < alleleCount; a++) {
-                Arrays.fill(sampleValues[a], sampleReadCount, newSampleReadCount, initialLikelihood);
+                Arrays.fill(sampleValues[a], sampleEvidenceCount, newSampleEvidenceCount, initialLikelihood);
             }
         }
     }
 
-    // Append the new read reference into the structure per-sample.
-    private void appendReads(final List<EVIDENCE> newSampleReads, final int sampleIndex) {
+    // Append the new evidence reference into the structure per-sample.
+    private void appendEvidence(final List<EVIDENCE> newSampleEvidence, final int sampleIndex) {
 
-        int nextReadIndex = readsBySampleIndex.get(sampleIndex).size();
+        int nextEvidenceIndex = evidenceBySampleIndex.get(sampleIndex).size();
 
-        readsBySampleIndex.get(sampleIndex).addAll(newSampleReads);
+        evidenceBySampleIndex.get(sampleIndex).addAll(newSampleEvidence);
 
-        final Object2IntMap<EVIDENCE> sampleReadIndex = readIndexBySampleIndex[sampleIndex];
-        for (final EVIDENCE newRead : newSampleReads) {
-            //    if (sampleReadIndex.containsKey(newRead)) // might be worth handle this without exception (ignore the read?) but in practice should never be the case.
-            //        throw new IllegalArgumentException("you cannot add reads that are already in read-likelihood collection");
-            if (sampleReadIndex != null ) {
-                sampleReadIndex.put(newRead, nextReadIndex);
+        final Object2IntMap<EVIDENCE> sampleEvidenceIndex = evidenceIndexBySampleIndex[sampleIndex];
+        for (final EVIDENCE newEvidence : newSampleEvidence) {
+            //    if (sampleEvidenceIndex.containsKey(newEvidence)) // might be worth handle this without exception (ignore the evidence?) but in practice should never be the case.
+            //        throw new IllegalArgumentException("you cannot add evidence already in evidence-likelihood collection");
+            if (sampleEvidenceIndex != null ) {
+                sampleEvidenceIndex.put(newEvidence, nextEvidenceIndex);
             }
         }
     }
 
     /**
-     * Adds the non-reference allele to the read-likelihood collection setting each read likelihood to the second
+     * Adds the non-reference allele to the evidence-likelihood collection setting each evidence likelihood to the second
      * best found (or best one if only one allele has likelihood).
      *
-     * <p>Nothing will happen if the read-likelihoods collection already includes the non-ref allele</p>
+     * <p>Nothing will happen if the evidence-likelihoods collection already includes the non-ref allele</p>
      *
      * <p>
      *     <i>Implementation note: even when strictly speaking we do not need to demand the calling code to pass
@@ -844,13 +843,13 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
         }
         final int alleleCount = alleles.numberOfAlleles();
         final int nonSymbolicAlleleCount = alleleCount - 1;
-        // likelihood buffer reused across reads:
+        // likelihood buffer reused across evidence:
         final double[] qualifiedAlleleLikelihoods = new double[nonSymbolicAlleleCount];
         final Median medianCalculator = new Median();
         for (int s = 0; s < samples.numberOfSamples(); s++) {
             final double[][] sampleValues = valuesBySampleIndex[s];
-            final int readCount = sampleValues[0].length;
-            for (int r = 0; r < readCount; r++) {
+            final int evidenceCount = sampleValues[0].length;
+            for (int r = 0; r < evidenceCount; r++) {
                 final BestAllele bestAllele = searchBestAllele(s, r, true);
                 int numberOfQualifiedAlleleLikelihoods = 0;
                 for (int i = 0; i < alleleCount; i++) {
@@ -862,7 +861,7 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
                 }
                 final double nonRefLikelihood = medianCalculator.evaluate(qualifiedAlleleLikelihoods, 0, numberOfQualifiedAlleleLikelihoods);
                 // when the median is NaN that means that all applicable likekihoods are the same as the best
-                // so the read is not informative at all given the existing alleles. Unless there is only one (or zero) concrete
+                // so the evidence is not informative at all given the existing alleles. Unless there is only one (or zero) concrete
                 // alleles with give the same (the best) likelihood to the NON-REF. When there is only one (or zero) concrete
                 // alleles we set the NON-REF likelihood to NaN.
                 sampleValues[nonRefAlleleIndex][r] = !Double.isNaN(nonRefLikelihood) ? nonRefLikelihood
@@ -872,13 +871,13 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
     }
 
     /**
-     * Returns the collection of best allele estimates for the reads based on the read-likelihoods.
-     * "Ties" where the ref likelihood is within {@code ReadLikelihoods.INFORMATIVE_THRESHOLD} of the greatest likelihood
+     * Returns the collection of best allele estimates for the evidence based on the evidence-likelihoods.
+     * "Ties" where the ref likelihood is within {@code AlleleLikelihoods.INFORMATIVE_THRESHOLD} of the greatest likelihood
      * are broken by the {@code tieBreakingPriority} function.
      *
      * @throws IllegalStateException if there is no alleles.
      *
-     * @return never {@code null}, one element per read in the read-likelihoods collection.
+     * @return never {@code null}, one element per unit fo evidence in the evidence-likelihoods collection.
      */
     public Collection<BestAllele> bestAllelesBreakingTies(final Function<A, Double> tieBreakingPriority) {
         return IntStream.range(0, numberOfSamples()).boxed().flatMap(n -> bestAllelesBreakingTies(n, tieBreakingPriority).stream()).collect(Collectors.toList());
@@ -892,13 +891,13 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
     }
 
     /**
-     * Returns the collection of best allele estimates for one sample's reads based on the read-likelihoods.
-     * "Ties" where the ref likelihood is within {@code ReadLikelihoods.INFORMATIVE_THRESHOLD} of the greatest likelihood
+     * Returns the collection of best allele estimates for one sample's evidence based on the evidence-likelihoods.
+     * "Ties" where the ref likelihood is within {@code AlleleLikelihoods.INFORMATIVE_THRESHOLD} of the greatest likelihood
      * are broken by the {@code tieBreakingPriority} function.
      *
      * @throws IllegalStateException if there is no alleles.
      *
-     * @return never {@code null}, one element per read in the read-likelihoods collection.
+     * @return never {@code null}, one element per unit of evidence in the evidence-likelihoods collection.
      */
     public Collection<BestAllele> bestAllelesBreakingTies(final String sample, final Function<A, Double> tieBreakingPriority) {
         final int sampleIndex = indexOfSample(sample);
@@ -914,13 +913,13 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
     }
 
     /**
-     * Returns the collection of best allele estimates for one sample's reads reads based on the read-likelihoods.
-     * "Ties" where the ref likelihood is within {@code ReadLikelihoods.INFORMATIVE_THRESHOLD} of the greatest likelihood
+     * Returns the collection of best allele estimates for one sample's evidence based on the evidence-likelihoods.
+     * "Ties" where the ref likelihood is within {@code AlleleLikelihoods.INFORMATIVE_THRESHOLD} of the greatest likelihood
      * are broken by the {@code tieBreakingPriority} function.
      *
      * @throws IllegalStateException if there is no alleles.
      *
-     * @return never {@code null}, one element per read in the read-likelihoods collection.
+     * @return never {@code null}, one element per unit of evidence in the evidence-likelihoods collection.
      */
     private Collection<BestAllele> bestAllelesBreakingTies(final int sampleIndex, final Function<A, Double> tieBreakingPriority) {
         Utils.validIndex(sampleIndex, numberOfSamples());
@@ -929,9 +928,9 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
         final Optional<double[]> priorities = alleles() == null ? Optional.empty() :
                 Optional.of(alleles().stream().mapToDouble(tieBreakingPriority::apply).toArray());
 
-        final int readCount = readsBySampleIndex.get(sampleIndex).size();
-        final List<BestAllele> result = new ArrayList<>(readCount);
-        for (int r = 0; r < readCount; r++) {
+        final int evidenceCount = evidenceBySampleIndex.get(sampleIndex).size();
+        final List<BestAllele> result = new ArrayList<>(evidenceCount);
+        for (int r = 0; r < evidenceCount; r++) {
             result.add(searchBestAllele(sampleIndex, r, true, priorities));
         }
 
@@ -947,117 +946,117 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
 
 
     /**
-     * Returns reads stratified by their best allele.
+     * Returns evidence stratified by best allele.
      * @param sampleIndex the target sample.
      * @return never {@code null}, perhaps empty.
      */
-    protected Map<A,List<EVIDENCE>> readsByBestAlleleMap(final int sampleIndex) {
+    protected Map<A,List<EVIDENCE>> evidenceByBestAlleleMap(final int sampleIndex) {
         Utils.validIndex(sampleIndex, numberOfSamples());
         final int alleleCount = alleles.numberOfAlleles();
-        final int sampleReadCount = readsBySampleIndex.get(sampleIndex).size();
+        final int sampleEvidenceCount = evidenceBySampleIndex.get(sampleIndex).size();
         final Map<A,List<EVIDENCE>> result = new LinkedHashMap<>(alleleCount);
         for (int a = 0; a < alleleCount; a++) {
-            result.put(alleles.getAllele(a), new ArrayList<>(sampleReadCount));
+            result.put(alleles.getAllele(a), new ArrayList<>(sampleEvidenceCount));
         }
-        readsByBestAlleleMap(sampleIndex,result);
+        evidenceByBestAlleleMap(sampleIndex,result);
         return result;
     }
 
     /**
-     * Returns reads stratified by their best allele.
+     * Returns evidence stratified by best allele.
      * @return never {@code null}, perhaps empty.
      */
     @VisibleForTesting
-    Map<A,List<EVIDENCE>> readsByBestAlleleMap() {
+    Map<A,List<EVIDENCE>> evidenceByBestAlleleMap() {
         final int alleleCount = alleles.numberOfAlleles();
         final Map<A,List<EVIDENCE>> result = new LinkedHashMap<>(alleleCount);
-        final int totalReadCount = readCount();
+        final int totalEvidenceCount = evidenceCount();
         for (int a = 0; a < alleleCount; a++) {
-            result.put(alleles.getAllele(a), new ArrayList<>(totalReadCount));
+            result.put(alleles.getAllele(a), new ArrayList<>(totalEvidenceCount));
         }
         final int sampleCount = samples.numberOfSamples();
         for (int s = 0; s < sampleCount; s++) {
-            readsByBestAlleleMap(s, result);
+            evidenceByBestAlleleMap(s, result);
         }
         return result;
     }
 
-    private void readsByBestAlleleMap(final int sampleIndex, final Map<A, List<EVIDENCE>> result) {
-        final int readCount = readsBySampleIndex.get(sampleIndex).size();
+    private void evidenceByBestAlleleMap(final int sampleIndex, final Map<A, List<EVIDENCE>> result) {
+        final int evidenceCount = evidenceBySampleIndex.get(sampleIndex).size();
 
-        for (int r = 0; r < readCount; r++) {
+        for (int r = 0; r < evidenceCount; r++) {
             final BestAllele bestAllele = searchBestAllele(sampleIndex,r,true);
             if (!bestAllele.isInformative()) {
                 continue;
             }
-            result.get(bestAllele.allele).add(bestAllele.read);
+            result.get(bestAllele.allele).add(bestAllele.evidence);
         }
     }
 
     /**
-     * Returns the index of a read within a sample read-likelihood sub collection.
+     * Returns the index of evidence within a sample evidence-likelihood sub collection.
      * @param sampleIndex the sample index.
-     * @param read the query read.
-     * @return -1 if there is no such read in that sample, 0 or greater otherwise.
+     * @param evidence the query evidence.
+     * @return -1 if there is no such evidence in that sample, 0 or greater otherwise.
      */
     @VisibleForTesting
-    int readIndex(final int sampleIndex, final EVIDENCE read) {
-        final Object2IntMap<EVIDENCE> readIndex = readIndexBySampleIndex(sampleIndex);
-        if (readIndex.containsKey(read)) {
-            return readIndexBySampleIndex(sampleIndex).getInt(read);
+    int evidenceIndex(final int sampleIndex, final EVIDENCE evidence) {
+        final Object2IntMap<EVIDENCE> evidenceIndex = evidenceIndexBySampleIndex(sampleIndex);
+        if (evidenceIndex.containsKey(evidence)) {
+            return evidenceIndexBySampleIndex(sampleIndex).getInt(evidence);
         } else {
             return -1;
         }
     }
 
     /**
-     * Returns the total number of reads in the read-likelihood collection.
+     * Returns the total count of evidence in the evidence-likelihood collection.
      *
      * @return never {@code null}
      */
-    public int readCount() {
-        return readsBySampleIndex.stream().mapToInt(List::size).sum();
+    public int evidenceCount() {
+        return evidenceBySampleIndex.stream().mapToInt(List::size).sum();
     }
 
     /**
-     * Returns the number of reads that belong to a sample in the read-likelihood collection.
+     * Returns the quantity of evidence that belongs to a sample in the evidence-likelihood collection.
      * @param sampleIndex the query sample index.
      *
      * @throws IllegalArgumentException if {@code sampleIndex} is not a valid sample index.
      * @return 0 or greater.
      */
-    public int sampleReadCount(final int sampleIndex) {
+    public int sampleEvidenceCount(final int sampleIndex) {
         Utils.validIndex(sampleIndex, samples.numberOfSamples());
-        return readsBySampleIndex.get(sampleIndex).size();
+        return evidenceBySampleIndex.get(sampleIndex).size();
     }
 
     /**
-     * Remove those reads that do not overlap certain genomic location.
+     * Removes evidence that does not overlap certain genomic location.
      *
      * <p>
-     *     This method modifies the current read-likelihoods collection.
+     *     This method modifies the current evidence-likelihoods collection.
      * </p>
      *
      * @param location the target location.
      *
      * @throws IllegalArgumentException the location cannot be {@code null} nor unmapped.
      */
-    public void filterToOnlyOverlappingReads(final SimpleInterval location) {
+    public void filterToOnlyOverlappingEvidence(final SimpleInterval location) {
         Utils.nonNull(location, "the location cannot be null");
 
         final int sampleCount = samples.numberOfSamples();
 
         final int alleleCount = alleles.numberOfAlleles();
         for (int s = 0; s < sampleCount; s++) {
-            final List<EVIDENCE> removeReads = readsBySampleIndex.get(s).stream()
+            final List<EVIDENCE> evidenceToRemove = evidenceBySampleIndex.get(s).stream()
                     .filter(r -> !r.overlaps(location))
                     .collect(Collectors.toList());
-            removeSampleReads(s, removeReads, alleleCount);
+            removeSampleEvidence(s, evidenceToRemove, alleleCount);
         }
     }
 
     /**
-     * Contains information about the best allele for a read search result.
+     * Contains information about the best allele for a unit of evidence.
      */
     public final class BestAllele {
 
@@ -1072,27 +1071,27 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
         public final String sample;
 
         /**
-         * The query read.
+         * The query evidence.
          */
-        public final EVIDENCE read;
+        public final EVIDENCE evidence;
 
         /**
-         * If allele != null, the indicates the likelihood of the read.
+         * If allele != null, the indicates the likelihood of the evidence.
          */
         public final double likelihood;
 
         /**
-         * Confidence that the read actually was generated under that likelihood.
+         * Confidence that the evidence actually was generated under that likelihood.
          * This is equal to the difference between this and the second best allele match.
          */
         public final double confidence;
 
-        private BestAllele(final int sampleIndex, final int readIndex, final int bestAlleleIndex,
+        private BestAllele(final int sampleIndex, final int evidenceIndex, final int bestAlleleIndex,
                            final double likelihood, final double secondBestLikelihood) {
             allele = bestAlleleIndex == -1 ? null : alleles.getAllele(bestAlleleIndex);
             this.likelihood = likelihood;
             sample = samples.getSample(sampleIndex);
-            read = readsBySampleIndex.get(sampleIndex).get(readIndex);
+            evidence = evidenceBySampleIndex.get(sampleIndex).get(evidenceIndex);
             confidence = likelihood == secondBestLikelihood ? 0 : likelihood - secondBestLikelihood;
         }
 
@@ -1102,52 +1101,52 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
     }
 
     // Requires that the collection passed iterator can remove elements, and it can be modified.
-    public void removeSampleReads(final int sampleIndex, final Collection<EVIDENCE> readsToRemove, final int alleleCount) {
-        if (readsToRemove.isEmpty()) {
+    public void removeSampleEvidence(final int sampleIndex, final Collection<EVIDENCE> evidenceToRemove, final int alleleCount) {
+        if (evidenceToRemove.isEmpty()) {
             return;
         }
 
-        final List<EVIDENCE> sampleReads = readsBySampleIndex.get(sampleIndex);
+        final List<EVIDENCE> sampleEvidence = evidenceBySampleIndex.get(sampleIndex);
 
-        final Set<EVIDENCE> readsToRemoveSet = new HashSet<>(readsToRemove);
-        final int[] readIndicesToKeep = IntStream.range(0, sampleReads.size()).filter(r -> !readsToRemoveSet.contains(sampleReads.get(r))).toArray();
+        final Set<EVIDENCE> evidenceToRemoveSet = new HashSet<>(evidenceToRemove);
+        final int[] evidenceIndicesToKeep = IntStream.range(0, sampleEvidence.size()).filter(r -> !evidenceToRemoveSet.contains(sampleEvidence.get(r))).toArray();
 
         // Nothing to remove we just finish here.
-        if (readIndicesToKeep.length == sampleReads.size()) {
+        if (evidenceIndicesToKeep.length == sampleEvidence.size()) {
             return;
         }
 
-        final List<EVIDENCE> newSampleReads = Arrays.stream(readIndicesToKeep).mapToObj(sampleReads::get).collect(Collectors.toList());
-        final Object2IntMap<EVIDENCE> indexByRead = readIndexBySampleIndex(sampleIndex);
-        indexByRead.clear();
-        new IndexRange(0, newSampleReads.size()).forEach(r -> indexByRead.put(newSampleReads.get(r), r));
+        final List<EVIDENCE> newSampleEvidence = Arrays.stream(evidenceIndicesToKeep).mapToObj(sampleEvidence::get).collect(Collectors.toList());
+        final Object2IntMap<EVIDENCE> indexByEvidence = evidenceIndexBySampleIndex(sampleIndex);
+        indexByEvidence.clear();
+        new IndexRange(0, newSampleEvidence.size()).forEach(r -> indexByEvidence.put(newSampleEvidence.get(r), r));
 
-        // Then we skim out the likelihoods of the removed reads.
+        // Then we skim out the likelihoods of the removed evidence.
         final double[][] oldSampleValues = valuesBySampleIndex[sampleIndex];
-        final double[][] newSampleValues = new double[alleleCount][newSampleReads.size()];
+        final double[][] newSampleValues = new double[alleleCount][newSampleEvidence.size()];
 
         for (int a = 0; a < alleleCount; a++) {
-            for (int r = 0; r < readIndicesToKeep.length; r++) {
-                newSampleValues[a][r] = oldSampleValues[a][readIndicesToKeep[r]];
+            for (int r = 0; r < evidenceIndicesToKeep.length; r++) {
+                newSampleValues[a][r] = oldSampleValues[a][evidenceIndicesToKeep[r]];
             }
         }
 
         valuesBySampleIndex[sampleIndex] = newSampleValues;
-        readsBySampleIndex.set(sampleIndex, newSampleReads);
-        readListBySampleIndex[sampleIndex] = null; // reset the unmodifiable list.
+        evidenceBySampleIndex.set(sampleIndex, newSampleEvidence);
+        evidenceListBySampleIndex[sampleIndex] = null; // reset the unmodifiable list.
     }
 
 
-    private Object2IntMap<EVIDENCE> readIndexBySampleIndex(final int sampleIndex) {
-        if (readIndexBySampleIndex[sampleIndex] == null) {
-            final List<EVIDENCE> sampleReads = readsBySampleIndex.get(sampleIndex);
-            final int sampleReadCount = sampleReads.size();
-            readIndexBySampleIndex[sampleIndex] = new Object2IntOpenHashMap<>(sampleReadCount);
-            for (int r = 0; r < sampleReadCount; r++) {
-                readIndexBySampleIndex[sampleIndex].put(sampleReads.get(r), r);
+    private Object2IntMap<EVIDENCE> evidenceIndexBySampleIndex(final int sampleIndex) {
+        if (evidenceIndexBySampleIndex[sampleIndex] == null) {
+            final List<EVIDENCE> sampleEvidence = evidenceBySampleIndex.get(sampleIndex);
+            final int sampleEvidenceCount = sampleEvidence.size();
+            evidenceIndexBySampleIndex[sampleIndex] = new Object2IntOpenHashMap<>(sampleEvidenceCount);
+            for (int r = 0; r < sampleEvidenceCount; r++) {
+                evidenceIndexBySampleIndex[sampleIndex].put(sampleEvidence.get(r), r);
             }
         }
-        return readIndexBySampleIndex[sampleIndex];
+        return evidenceIndexBySampleIndex[sampleIndex];
     }
 
 
@@ -1173,40 +1172,39 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
             this.sampleIndex = sampleIndex;
         }
 
-        @Override
-        public List<EVIDENCE> reads() {
-            return sampleReads(sampleIndex);
+        public List<EVIDENCE> evidence() {
+            return sampleEvidence(sampleIndex);
         }
 
         @Override
         public List<A> alleles() {
-            return MoleculeLikelihoods.this.alleles();
+            return AlleleLikelihoods.this.alleles();
         }
 
         @Override
-        public void set(final int alleleIndex, final int readIndex, final double value) {
+        public void set(final int alleleIndex, final int evidenceIndex, final double value) {
             Utils.validIndex(alleleIndex, valuesBySampleIndex[sampleIndex].length);
-            Utils.validIndex(readIndex, valuesBySampleIndex[sampleIndex][alleleIndex].length);
-            valuesBySampleIndex[sampleIndex][alleleIndex][readIndex] = value;
+            Utils.validIndex(evidenceIndex, valuesBySampleIndex[sampleIndex][alleleIndex].length);
+            valuesBySampleIndex[sampleIndex][alleleIndex][evidenceIndex] = value;
         }
 
         @Override
-        public double get(final int alleleIndex, final int readIndex) {
+        public double get(final int alleleIndex, final int evidenceIndex) {
             Utils.validIndex(alleleIndex, valuesBySampleIndex[sampleIndex].length);
-            Utils.validIndex(readIndex, valuesBySampleIndex[sampleIndex][alleleIndex].length);
-            return valuesBySampleIndex[sampleIndex][alleleIndex][readIndex];
+            Utils.validIndex(evidenceIndex, valuesBySampleIndex[sampleIndex][alleleIndex].length);
+            return valuesBySampleIndex[sampleIndex][alleleIndex][evidenceIndex];
         }
 
         @Override
         public int indexOfAllele(final A allele) {
             Utils.nonNull(allele);
-            return MoleculeLikelihoods.this.indexOfAllele(allele);
+            return AlleleLikelihoods.this.indexOfAllele(allele);
         }
 
         @Override
-        public int indexOfRead(final EVIDENCE read) {
-            Utils.nonNull(read);
-            return MoleculeLikelihoods.this.readIndex(sampleIndex, read);
+        public int indexOfEvidence(final EVIDENCE evidence) {
+            Utils.nonNull(evidence);
+            return AlleleLikelihoods.this.evidenceIndex(sampleIndex, evidence);
         }
 
         @Override
@@ -1215,27 +1213,27 @@ public class MoleculeLikelihoods<EVIDENCE extends Locatable, A extends Allele> i
         }
 
         @Override
-        public int numberOfReads() {
-            return readsBySampleIndex.get(sampleIndex).size();
+        public int evidenceCount() {
+            return evidenceBySampleIndex.get(sampleIndex).size();
         }
 
         @Override
         public A getAllele(final int alleleIndex) {
-            return MoleculeLikelihoods.this.getAllele(alleleIndex);
+            return AlleleLikelihoods.this.getAllele(alleleIndex);
         }
 
         @Override
-        public EVIDENCE getRead(final int readIndex) {
-            final List<EVIDENCE> sampleReads = readsBySampleIndex.get(sampleIndex);
-            Utils.validIndex(readIndex, sampleReads.size());
-            return sampleReads.get(readIndex);
+        public EVIDENCE getEvidence(final int evidenceIndex) {
+            final List<EVIDENCE> sampleEvidence = evidenceBySampleIndex.get(sampleIndex);
+            Utils.validIndex(evidenceIndex, sampleEvidence.size());
+            return sampleEvidence.get(evidenceIndex);
         }
 
         @Override
         public void copyAlleleLikelihoods(final int alleleIndex, final double[] dest, final int offset) {
             Utils.nonNull(dest);
             Utils.validIndex(alleleIndex, valuesBySampleIndex[sampleIndex].length);
-            System.arraycopy(valuesBySampleIndex[sampleIndex][alleleIndex], 0, dest, offset, numberOfReads());
+            System.arraycopy(valuesBySampleIndex[sampleIndex][alleleIndex], 0, dest, offset, evidenceCount());
         }
     }
 }

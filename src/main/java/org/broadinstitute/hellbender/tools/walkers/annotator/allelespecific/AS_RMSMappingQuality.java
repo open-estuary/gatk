@@ -183,7 +183,7 @@ public final class AS_RMSMappingQuality extends InfoFieldAnnotation implements A
     private void getRMSDataFromLikelihoods(final ReadLikelihoods<Allele> likelihoods, ReducibleAnnotationData<Double> myData) {
         for ( final ReadLikelihoods<Allele>.BestAllele bestAllele : likelihoods.bestAllelesBreakingTies() ) {
             if (bestAllele.isInformative()) {
-                final int mq = bestAllele.read.getMappingQuality();
+                final int mq = bestAllele.evidence.getMappingQuality();
                 if ( mq != QualityUtils.MAPPING_QUALITY_UNAVAILABLE ) {
                     final double currSquareSum = myData.hasAttribute(bestAllele.allele) ? (double) myData.getAttribute(bestAllele.allele) : 0;
                     myData.putAttribute(bestAllele.allele, currSquareSum + mq * mq);

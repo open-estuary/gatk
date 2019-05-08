@@ -2,10 +2,7 @@ package org.broadinstitute.hellbender.tools.walkers.annotator;
 
 import com.google.common.collect.ImmutableMap;
 import htsjdk.variant.variantcontext.Allele;
-import htsjdk.variant.variantcontext.Genotype;
-import htsjdk.variant.variantcontext.GenotypeBuilder;
 import htsjdk.variant.variantcontext.VariantContext;
-import htsjdk.variant.vcf.VCFFormatHeaderLine;
 import htsjdk.variant.vcf.VCFInfoHeaderLine;
 import org.broadinstitute.barclay.help.DocumentedFeature;
 import org.broadinstitute.hellbender.engine.ReferenceContext;
@@ -57,8 +54,8 @@ public class OriginalAlignment extends InfoFieldAnnotation {
         final String currentContig = ref.getInterval().getContig();
 
         final long nonChrMAlt = bestAlleles.stream()
-                .filter(ba -> ba.read.hasAttribute(AddOriginalAlignmentTags.OA_TAG_NAME) && ba.isInformative() && ba.allele.equals(altAlelle) &&
-                        !AddOriginalAlignmentTags.getOAContig(ba.read).equals(currentContig))
+                .filter(ba -> ba.evidence.hasAttribute(AddOriginalAlignmentTags.OA_TAG_NAME) && ba.isInformative() && ba.allele.equals(altAlelle) &&
+                        !AddOriginalAlignmentTags.getOAContig(ba.evidence).equals(currentContig))
                 .count();
         return ImmutableMap.of(GATKVCFConstants.ORIGINAL_CONTIG_MISMATCH_KEY, nonChrMAlt);
     }

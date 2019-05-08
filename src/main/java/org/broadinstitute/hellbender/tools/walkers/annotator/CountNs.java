@@ -2,11 +2,7 @@ package org.broadinstitute.hellbender.tools.walkers.annotator;
 
 import com.google.common.collect.ImmutableMap;
 import htsjdk.variant.variantcontext.Allele;
-import htsjdk.variant.variantcontext.Genotype;
-import htsjdk.variant.variantcontext.GenotypeBuilder;
 import htsjdk.variant.variantcontext.VariantContext;
-import htsjdk.variant.vcf.VCFFormatHeaderLine;
-import htsjdk.variant.vcf.VCFHeaderLineType;
 import htsjdk.variant.vcf.VCFInfoHeaderLine;
 import org.broadinstitute.barclay.help.DocumentedFeature;
 import org.broadinstitute.hellbender.engine.ReferenceContext;
@@ -42,7 +38,7 @@ public class CountNs extends InfoFieldAnnotation {
             return Collections.emptyMap();
         }
         long Count = IntStream.range(0, likelihoods.numberOfSamples()).boxed()
-                .flatMap(n -> likelihoods.sampleReads(n).stream())
+                .flatMap(n -> likelihoods.sampleEvidence(n).stream())
                 .filter(read -> doesReadHaveN(read, vc)).count();
 
         return ImmutableMap.of(GATKVCFConstants.N_COUNT_KEY, Count);

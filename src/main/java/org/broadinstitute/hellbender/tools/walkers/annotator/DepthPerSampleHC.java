@@ -7,8 +7,6 @@ import htsjdk.variant.variantcontext.VariantContext;
 import htsjdk.variant.vcf.VCFConstants;
 import htsjdk.variant.vcf.VCFFormatHeaderLine;
 import htsjdk.variant.vcf.VCFStandardHeaderLines;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.broadinstitute.barclay.help.DocumentedFeature;
 import org.broadinstitute.hellbender.engine.ReferenceContext;
 import org.broadinstitute.hellbender.utils.Utils;
@@ -60,7 +58,7 @@ public final class DepthPerSampleHC extends GenotypeAnnotation implements Standa
 
         // check that there are reads
         final String sample = g.getSampleName();
-        if (likelihoods.sampleReadCount(likelihoods.indexOfSample(sample)) == 0) {
+        if (likelihoods.sampleEvidenceCount(likelihoods.indexOfSample(sample)) == 0) {
             gb.DP(0);
             return;
         }

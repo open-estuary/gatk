@@ -8,7 +8,6 @@ import it.unimi.dsi.fastutil.ints.Int2IntMap;
 import org.broadinstitute.hellbender.utils.IndexRange;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.genotyper.LikelihoodMatrix;
-import org.broadinstitute.hellbender.utils.read.GATKRead;
 
 import java.util.Arrays;
 import java.util.List;
@@ -44,36 +43,36 @@ public class SubsettedLikelihoodMatrix<EVIDENCE extends Locatable, A extends All
     public static boolean basesMatch(final Allele a, final Allele b) { return a.getBases() == b.getBases() || Arrays.equals(a.getBases(), b.getBases()); }
 
     @Override
-    public List<EVIDENCE> reads() { return matrix.reads(); }
+    public List<EVIDENCE> evidence() { return matrix.evidence(); }
 
     @Override
     public List<A> alleles() { return alleles; }
 
     @Override
-    public void set(final int alleleIndex, final int readIndex, final double value) {
+    public void set(final int alleleIndex, final int evidenceIndex, final double value) {
         throw new UnsupportedOperationException("Subsetted likelihood matrices are immutable.");
     }
 
     @Override
-    public double get(final int alleleIndex, final int readIndex) { return matrix.get(newToOldIndexMap.get(alleleIndex), readIndex); }
+    public double get(final int alleleIndex, final int evidenceIndex) { return matrix.get(newToOldIndexMap.get(alleleIndex), evidenceIndex); }
 
     @Override
     public int indexOfAllele(final A allele) { return alleles.indexOf(allele); }
 
     @Override
-    public int indexOfRead(final EVIDENCE read) { return matrix.indexOfRead(read); }
+    public int indexOfEvidence(final EVIDENCE evidence) { return matrix.indexOfEvidence(evidence); }
 
     @Override
     public int numberOfAlleles() { return alleles.size(); }
 
     @Override
-    public int numberOfReads() { return matrix.numberOfReads(); }
+    public int evidenceCount() { return matrix.evidenceCount(); }
 
     @Override
     public A getAllele(final int alleleIndex) { return alleles.get(alleleIndex); }
 
     @Override
-    public EVIDENCE getRead(final int readIndex) { return matrix.getRead(readIndex); }
+    public EVIDENCE getEvidence(final int evidenceIndex) { return matrix.getEvidence(evidenceIndex); }
 
     @Override
     public void copyAlleleLikelihoods(final int alleleIndex, final double[] dest, final int offset) {

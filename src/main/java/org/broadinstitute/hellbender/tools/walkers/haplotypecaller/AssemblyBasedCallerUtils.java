@@ -24,7 +24,7 @@ import org.broadinstitute.hellbender.utils.fasta.CachingIndexedFastaSequenceFile
 import org.broadinstitute.hellbender.utils.fragments.FragmentCollection;
 import org.broadinstitute.hellbender.utils.fragments.FragmentUtils;
 import org.broadinstitute.hellbender.utils.genotyper.IndexedAlleleList;
-import org.broadinstitute.hellbender.utils.genotyper.MoleculeLikelihoods;
+import org.broadinstitute.hellbender.utils.genotyper.AlleleLikelihoods;
 import org.broadinstitute.hellbender.utils.genotyper.ReadLikelihoods;
 import org.broadinstitute.hellbender.utils.genotyper.SampleList;
 import org.broadinstitute.hellbender.utils.haplotype.Haplotype;
@@ -80,7 +80,7 @@ public final class AssemblyBasedCallerUtils {
         final Map<GATKRead, GATKRead> result = new HashMap<>(bestAlleles.size());
 
         for (final ReadLikelihoods<Haplotype>.BestAllele bestAllele : bestAlleles) {
-            final GATKRead originalRead = bestAllele.read;
+            final GATKRead originalRead = bestAllele.evidence;
             final Haplotype bestHaplotype = bestAllele.allele;
             final boolean isInformative = bestAllele.isInformative();
             final GATKRead realignedRead = AlignmentUtils.createReadAlignedToRef(originalRead, bestHaplotype, refHaplotype, paddedReferenceLoc.getStart(), isInformative, aligner);
@@ -372,7 +372,7 @@ public final class AssemblyBasedCallerUtils {
         //assign alignment regions to each read
         final Collection<ReadLikelihoods<Haplotype>.BestAllele> bestHaplotypes = likelihoods.bestAllelesBreakingTies(HAPLOTYPE_ALIGNMENT_TIEBREAKING_PRIORITY);
         for (final ReadLikelihoods<Haplotype>.BestAllele bestHaplotype : bestHaplotypes) {
-            final GATKRead read = bestHaplotype.read;
+            final GATKRead read = bestHaplotype.evidence;
             final Haplotype haplotype = bestHaplotype.allele;
             read.setAttribute(ALIGNMENT_REGION_TAG, haplotype.getGenomeLocation().toString());
         }
@@ -380,7 +380,7 @@ public final class AssemblyBasedCallerUtils {
         //assign callable region to each read
         final int sampleCount = likelihoods.numberOfSamples();
         for (int i = 0; i < sampleCount; i++) {
-            for (final GATKRead read : likelihoods.sampleReads(i)) {
+            for (final GATKRead read : likelihoods.sampleEvidence(i)) {
                 read.setAttribute(CALLABLE_REGION_TAG, callableRegion.toString());
             }
         }
@@ -400,7 +400,7 @@ public final class AssemblyBasedCallerUtils {
         final Collection<ReadLikelihoods<Allele>.BestAllele> bestAlleles = subsettedLikelihoods.bestAllelesBreakingTies().stream()
                 .filter(ba -> ba.isInformative()).collect(Collectors.toList());
         for (ReadLikelihoods<Allele>.BestAllele bestAllele : bestAlleles) {
-            GATKRead read = bestAllele.read;
+            GATKRead read = bestAllele.evidence;
             Allele allele = bestAllele.allele;
             final String prevAllelesString = read.hasAttribute(SUPPORTED_ALLELES_TAG) ? read.getAttributeAsString(SUPPORTED_ALLELES_TAG) + ", " : "";
             final String newAllelesString = vc.getContig() + ":" + vc.getStart() + "=" + vc.getAlleleIndex(allele);
@@ -409,14 +409,14 @@ public final class AssemblyBasedCallerUtils {
     }
 
     public static void annotateReadLikelihoodsWithSupportedAlleles(final VariantContext vc,
-                                                                   final MoleculeLikelihoods<Fragment, Allele> likelihoodsAllele) {
+                                                                   final AlleleLikelihoods<Fragment, Allele> likelihoodsAllele) {
         //assign supported alleles to each read
         final Map<Allele, List<Allele>> alleleSubset = vc.getAlleles().stream().collect(Collectors.toMap(a -> a, Arrays::asList));
-        final MoleculeLikelihoods<Fragment, Allele> subsettedLikelihoods = likelihoodsAllele.marginalize(alleleSubset);
-        final Collection<MoleculeLikelihoods<Fragment, Allele>.BestAllele> bestAlleles = subsettedLikelihoods.bestAllelesBreakingTies().stream()
+        final AlleleLikelihoods<Fragment, Allele> subsettedLikelihoods = likelihoodsAllele.marginalize(alleleSubset);
+        final Collection<AlleleLikelihoods<Fragment, Allele>.BestAllele> bestAlleles = subsettedLikelihoods.bestAllelesBreakingTies().stream()
                 .filter(ba -> ba.isInformative()).collect(Collectors.toList());
-        for (MoleculeLikelihoods<Fragment, Allele>.BestAllele bestAllele : bestAlleles) {
-            final Fragment fragment = bestAllele.read;
+        for (AlleleLikelihoods<Fragment, Allele>.BestAllele bestAllele : bestAlleles) {
+            final Fragment fragment = bestAllele.evidence;
             final Allele allele = bestAllele.allele;
             for (final GATKRead read : fragment.getReads()) {
                 final String prevAllelesString = read.hasAttribute(SUPPORTED_ALLELES_TAG) ? read.getAttributeAsString(SUPPORTED_ALLELES_TAG) + ", " : "";
@@ -449,7 +449,7 @@ public final class AssemblyBasedCallerUtils {
                                                      final SimpleInterval activeRegionSpan,
                                                      final ReadLikelihoods<Haplotype> readLikelihoods,
                                                      final SampleList samples) {
-        final List<GATKRead> reads = new ArrayList<>(readLikelihoods.sampleReads(0));
+        final List<GATKRead> reads = new ArrayList<>(readLikelihoods.sampleEvidence(0));
         reads.sort(new ReadCoordinateComparator(readsHeader));  //because we updated the reads based on the local realignments we have to re-sort or the pileups will be... unpredictable
 
         final LocusIteratorByState libs = new LocusIteratorByState(reads.iterator(), LocusIteratorByState.NO_DOWNSAMPLING,

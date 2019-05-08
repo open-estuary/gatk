@@ -1,14 +1,11 @@
 package org.broadinstitute.hellbender.tools.walkers.genotyper;
 
-import htsjdk.samtools.util.Locatable;
 import htsjdk.variant.variantcontext.Allele;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.genotyper.AlleleListPermutation;
 import org.broadinstitute.hellbender.utils.genotyper.LikelihoodMatrix;
-import org.broadinstitute.hellbender.utils.read.GATKRead;
 
 import java.util.List;
-import java.util.function.UnaryOperator;
 
 /**
  * Creates {@link org.broadinstitute.hellbender.utils.genotyper.LikelihoodMatrix} mappers to be used when working with a subset of the original alleles.
@@ -37,8 +34,8 @@ public class AlleleLikelihoodMatrixMapper<A extends Allele> {
         return new LikelihoodMatrix<EVIDENCE, A>() {
 
             @Override
-            public List<EVIDENCE> reads() {
-                return original.reads();
+            public List<EVIDENCE> evidence() {
+                return original.evidence();
             }
 
             @Override
@@ -47,17 +44,17 @@ public class AlleleLikelihoodMatrixMapper<A extends Allele> {
             }
 
             @Override
-            public void set(final int alleleIndex, final int readIndex, final double value) {
+            public void set(final int alleleIndex, final int evidenceIndex, final double value) {
                 Utils.validateArg(alleleIndex >= 0, "alleleIndex");
-                Utils.validateArg(readIndex >= 0, "readIndex");
-                original.set(permutation.fromIndex(alleleIndex), readIndex, value);
+                Utils.validateArg(evidenceIndex >= 0, "readIndex");
+                original.set(permutation.fromIndex(alleleIndex), evidenceIndex, value);
             }
 
             @Override
-            public double get(final int alleleIndex, final int readIndex) {
+            public double get(final int alleleIndex, final int evidenceIndex) {
                 Utils.validateArg(alleleIndex >= 0, "alleleIndex");
-                Utils.validateArg(readIndex >= 0, "readIndex");
-                return original.get(permutation.fromIndex(alleleIndex), readIndex);
+                Utils.validateArg(evidenceIndex >= 0, "readIndex");
+                return original.get(permutation.fromIndex(alleleIndex), evidenceIndex);
             }
 
             @Override
@@ -69,7 +66,7 @@ public class AlleleLikelihoodMatrixMapper<A extends Allele> {
             @Override
             public int indexOfRead(final EVIDENCE read) {
                 Utils.nonNull(read);
-                return original.indexOfRead(read);
+                return original.indexOfEvidence(read);
             }
 
             @Override
@@ -78,8 +75,8 @@ public class AlleleLikelihoodMatrixMapper<A extends Allele> {
             }
 
             @Override
-            public int numberOfReads() {
-                return original.numberOfReads();
+            public int evidenceCount() {
+                return original.evidenceCount();
             }
 
             @Override
@@ -89,9 +86,9 @@ public class AlleleLikelihoodMatrixMapper<A extends Allele> {
             }
 
             @Override
-            public EVIDENCE getRead(final int readIndex) {
-                Utils.validateArg(readIndex >= 0, "readIndex");
-                return original.getRead(readIndex);
+            public EVIDENCE getEvidence(final int evidenceIndex) {
+                Utils.validateArg(evidenceIndex >= 0, "readIndex");
+                return original.getEvidence(evidenceIndex);
             }
 
             @Override

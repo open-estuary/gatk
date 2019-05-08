@@ -59,7 +59,7 @@ public final class DepthPerAlleleBySample extends GenotypeAnnotation implements 
         if (likelihoods.hasFilledLikelihoods()) {
             // Compute based on the alignment map
             counts = annotateWithLikelihoods(vc, g, alleles, likelihoods);
-        } else if (likelihoods.readCount()==0) {
+        } else if (likelihoods.evidenceCount()==0) {
             // No reads, thus cant compute the AD so do nothing
             return;
         } else if (vc.isSNP()) {

@@ -46,7 +46,7 @@ public final class MappingQualityZero extends InfoFieldAnnotation {
         }
         //NOTE: unlike other annotations, this one returns 0 if likelihoods are empty
         final long mq0 = IntStream.range(0, likelihoods.numberOfSamples()).boxed()
-                .flatMap(s -> likelihoods.sampleReads(s).stream())
+                .flatMap(s -> likelihoods.sampleEvidence(s).stream())
                 .filter(r -> r.getMappingQuality() == 0)
                 .count();
 

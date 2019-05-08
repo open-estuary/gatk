@@ -27,7 +27,7 @@ public final class RandomLikelihoodCalculationEngine implements ReadLikelihoodCa
         final int sampleCount = samples.numberOfSamples();
         final int alleleCount = haplotypes.numberOfAlleles();
         for (int i = 0; i < sampleCount; i++)  {
-            final List<GATKRead> sampleReads = result.sampleReads(i);
+            final List<GATKRead> sampleReads = result.sampleEvidence(i);
             final int readCount = sampleReads.size();
             final LikelihoodMatrix<GATKRead, Haplotype> sampleLikelihoods = result.sampleMatrix(i);
             for (int a = 0; a < alleleCount; a++) {
