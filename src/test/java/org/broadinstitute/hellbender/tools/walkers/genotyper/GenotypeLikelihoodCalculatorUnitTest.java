@@ -4,8 +4,8 @@ import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.GenotypeLikelihoods;
 import org.broadinstitute.hellbender.utils.MathUtils;
 import org.broadinstitute.hellbender.utils.Utils;
+import org.broadinstitute.hellbender.utils.genotyper.AlleleLikelihoods;
 import org.broadinstitute.hellbender.utils.genotyper.LikelihoodMatrix;
-import org.broadinstitute.hellbender.utils.genotyper.ReadLikelihoods;
 import org.broadinstitute.hellbender.utils.genotyper.ReadLikelihoodsUnitTester;
 import org.broadinstitute.hellbender.utils.read.GATKRead;
 import org.testng.Assert;
@@ -49,7 +49,7 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
 
     @Test(dataProvider = "ploidyAndMaximumAlleleAndReadCountsData", dependsOnMethods = "testPloidyAndMaximumAllele")
     public void testLikelihoodCalculation(final int ploidy, final int alleleCount, final int[] readCount) {
-        final ReadLikelihoods<Allele> readLikelihoods = ReadLikelihoodsUnitTester.readLikelihoods(alleleCount, readCount);
+        final AlleleLikelihoods<GATKRead, Allele> readLikelihoods = ReadLikelihoodsUnitTester.readLikelihoods(alleleCount, readCount);
         final GenotypeLikelihoodCalculator calculator = new GenotypeLikelihoodCalculators().getInstance(ploidy, alleleCount);
         final int genotypeCount = calculator.genotypeCount();
         final int testGenotypeCount = Math.min(30000, genotypeCount);

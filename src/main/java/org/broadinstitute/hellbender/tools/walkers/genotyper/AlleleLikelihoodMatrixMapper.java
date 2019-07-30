@@ -64,7 +64,7 @@ public class AlleleLikelihoodMatrixMapper<A extends Allele> {
             }
 
             @Override
-            public int indexOfRead(final EVIDENCE read) {
+            public int indexOfEvidence(final EVIDENCE read) {
                 Utils.nonNull(read);
                 return original.indexOfEvidence(read);
             }

@@ -45,7 +45,7 @@ public class BaseQualityUnitTest {
         }
         readMap.put("SAMPLE", reads);
 
-        final ReadLikelihoods<Allele> likelihoods = new ReadLikelihoods<>(sampleList, alleleList, readMap);
+        final AlleleLikelihoods<GATKRead, Allele> likelihoods = new AlleleLikelihoods<>(sampleList, alleleList, readMap);
 
         //we will make the first four reads ref (median position = 2) and the last three alt (median position 10, hence
         // median distance from end = 1)

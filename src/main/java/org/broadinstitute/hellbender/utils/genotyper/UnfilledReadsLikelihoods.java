@@ -2,20 +2,20 @@ package org.broadinstitute.hellbender.utils.genotyper;
 
 import htsjdk.samtools.util.Locatable;
 import htsjdk.variant.variantcontext.Allele;
-import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.pileup.PileupElement;
 import org.broadinstitute.hellbender.utils.pileup.ReadPileup;
 import org.broadinstitute.hellbender.utils.read.GATKRead;
 
 import java.util.*;
+import java.util.function.ToDoubleFunction;
 
 /**
  * Dummy Read-Likelihood container that computes partial likelihoods based on the read pileups for snps.
  *
  * Note: this class uses FastUtil collections for speed.
  */
-public class UnfilledReadsLikelihoods<A extends Allele> extends ReadLikelihoods<A> {
+public class UnfilledReadsLikelihoods<A extends Allele> extends AlleleLikelihoods<GATKRead, A> {
 
     private Map<String, List<PileupElement>> stratifiedPileups;
 
@@ -36,16 +36,6 @@ public class UnfilledReadsLikelihoods<A extends Allele> extends ReadLikelihoods<
      */
     public UnfilledReadsLikelihoods(SampleList samples, AlleleList<A> alleles, Map<String, List<GATKRead>> reads) {
         super(samples, alleles, reads);
-    }
-
-    // Internally used constructor.
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private UnfilledReadsLikelihoods(final AlleleList alleles,
-                            final SampleList samples,
-                            final List<List<GATKRead>> readsBySampleIndex,
-                            final Object2IntMap<GATKRead>[] readIndex,
-                            final double[][][] values) {
-       super(alleles, samples, readsBySampleIndex, readIndex, values);
     }
 
     /**
@@ -75,37 +65,6 @@ public class UnfilledReadsLikelihoods<A extends Allele> extends ReadLikelihoods<
         return stratifiedPileups;
     }
 
-    /**
-     * Create an independent copy of this read-likelihoods collection
-     */
-    @Override
-    public ReadLikelihoods<A> copy() {
-
-        final int sampleCount = samples.numberOfSamples();
-        final int alleleCount = alleles.numberOfAlleles();
-
-        final double[][][] newLikelihoodValues = new double[sampleCount][alleleCount][];
-
-        @SuppressWarnings({"unchecked", "rawtypes"})
-        final Object2IntMap<GATKRead>[] newReadIndexBySampleIndex = new Object2IntMap[sampleCount];
-        final List<List<GATKRead>> newReadsBySampleIndex = new ArrayList<>(sampleCount);
-
-        for (int s = 0; s < sampleCount; s++) {
-            newReadsBySampleIndex.add(new ArrayList<>(evidenceBySampleIndex.get(s)));
-            for (int a = 0; a < alleleCount; a++) {
-                newLikelihoodValues[s][a] = valuesBySampleIndex[s][a].clone();
-            }
-        }
-
-        // Finally we create the new read-likelihood
-        return new UnfilledReadsLikelihoods<A>(
-                alleles,
-                samples,
-                newReadsBySampleIndex,
-                newReadIndexBySampleIndex,
-                newLikelihoodValues);
-    }
-
     // Methods Which Modify Reads that must be turned off
     @Override
     public void changeEvidence(final Map<GATKRead, GATKRead> readRealignments) {
@@ -113,7 +72,7 @@ public class UnfilledReadsLikelihoods<A extends Allele> extends ReadLikelihoods<
     }
 
     @Override
-    public void filterPoorlyModeledReads(final double maximumErrorPerBase) {
+    public void filterPoorlyModeledEvidence(final ToDoubleFunction<GATKRead> log10MinTrueLikelihood) {
         throw new UnsupportedOperationException("Cannot alter reads in UnfilledReadsLikelihoods object or cached pileups may be rendered inaccurate, please use a normal ReadsLikelihoods object");
     }
 

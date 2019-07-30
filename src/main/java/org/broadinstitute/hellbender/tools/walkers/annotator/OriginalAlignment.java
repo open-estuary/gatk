@@ -9,9 +9,10 @@ import org.broadinstitute.hellbender.engine.ReferenceContext;
 import org.broadinstitute.hellbender.tools.AddOriginalAlignmentTags;
 import org.broadinstitute.hellbender.tools.walkers.mutect.filtering.Mutect2FilteringEngine;
 import org.broadinstitute.hellbender.utils.*;
-import org.broadinstitute.hellbender.utils.genotyper.ReadLikelihoods;
+import org.broadinstitute.hellbender.utils.genotyper.AlleleLikelihoods;
 import org.broadinstitute.hellbender.utils.help.HelpConstants;
 import org.broadinstitute.hellbender.utils.logging.OneShotLogger;
+import org.broadinstitute.hellbender.utils.read.GATKRead;
 import org.broadinstitute.hellbender.utils.variant.GATKVCFConstants;
 import org.broadinstitute.hellbender.utils.variant.GATKVCFHeaderLines;
 
@@ -39,7 +40,7 @@ public class OriginalAlignment extends InfoFieldAnnotation {
     public static final String KEY = GATKVCFConstants.ORIGINAL_CONTIG_MISMATCH_KEY;
 
     @Override
-    public Map<String, Object> annotate(ReferenceContext ref, VariantContext vc, ReadLikelihoods<Allele> likelihoods) {
+    public Map<String, Object> annotate(ReferenceContext ref, VariantContext vc, AlleleLikelihoods<GATKRead, Allele> likelihoods) {
         Utils.nonNull(vc);
         Utils.nonNull(likelihoods);
 
@@ -50,7 +51,7 @@ public class OriginalAlignment extends InfoFieldAnnotation {
         }
         final int indexOfMaxLod = MathUtils.maxElementIndex(lods);
         final Allele altAlelle = vc.getAlternateAllele(indexOfMaxLod);
-        final Collection<ReadLikelihoods<Allele>.BestAllele> bestAlleles = likelihoods.bestAllelesBreakingTies();
+        final Collection<AlleleLikelihoods<GATKRead, Allele>.BestAllele> bestAlleles = likelihoods.bestAllelesBreakingTies();
         final String currentContig = ref.getInterval().getContig();
 
         final long nonChrMAlt = bestAlleles.stream()

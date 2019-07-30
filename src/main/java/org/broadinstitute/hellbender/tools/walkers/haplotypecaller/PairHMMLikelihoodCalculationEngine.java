@@ -22,6 +22,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.PrintStream;
 import java.util.*;
+import java.util.function.ToDoubleFunction;
 
 /*
  * Classic likelihood computation: full pair-hmm all haplotypes vs all reads.
@@ -166,7 +167,7 @@ public final class PairHMMLikelihoodCalculationEngine implements ReadLikelihoodC
     }
 
     @Override
-    public ReadLikelihoods<Haplotype> computeReadLikelihoods( final AssemblyResultSet assemblyResultSet, final SampleList samples, final Map<String, List<GATKRead>> perSampleReadList ) {
+    public AlleleLikelihoods<GATKRead, Haplotype> computeReadLikelihoods( final AssemblyResultSet assemblyResultSet, final SampleList samples, final Map<String, List<GATKRead>> perSampleReadList ) {
         Utils.nonNull(assemblyResultSet, "assemblyResultSet is null");
         Utils.nonNull(samples, "samples is null");
         Utils.nonNull(perSampleReadList, "perSampleReadList is null");
@@ -177,15 +178,23 @@ public final class PairHMMLikelihoodCalculationEngine implements ReadLikelihoodC
         initializePairHMM(haplotypeList, perSampleReadList);
 
         // Add likelihoods for each sample's reads to our result
-        final ReadLikelihoods<Haplotype> result = new ReadLikelihoods<>(samples, haplotypes, perSampleReadList);
+        final AlleleLikelihoods<GATKRead, Haplotype> result = new AlleleLikelihoods<>(samples, haplotypes, perSampleReadList);
         final int sampleCount = result.numberOfSamples();
         for (int i = 0; i < sampleCount; i++) {
             computeReadLikelihoods(result.sampleMatrix(i));
         }
 
         result.normalizeLikelihoods(log10globalReadMismappingRate);
-        result.filterPoorlyModeledReads(EXPECTED_ERROR_RATE_PER_BASE);
+        result.filterPoorlyModeledEvidence(log10MinTrueLikelihood(EXPECTED_ERROR_RATE_PER_BASE));
         return result;
+    }
+
+    private ToDoubleFunction<GATKRead> log10MinTrueLikelihood(final double maximumErrorPerBase) {
+        return read -> {
+            final double maxErrorsForRead = Math.min(2.0, Math.ceil(read.getLength() * maximumErrorPerBase));
+            final double log10QualPerBase = -4.0;
+            return maxErrorsForRead * log10QualPerBase;
+        };
     }
 
     /**

@@ -13,10 +13,7 @@ import org.broadinstitute.hellbender.tools.walkers.genotyper.*;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.afcalc.AFCalculatorProvider;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.Utils;
-import org.broadinstitute.hellbender.utils.genotyper.AlleleList;
-import org.broadinstitute.hellbender.utils.genotyper.IndexedAlleleList;
-import org.broadinstitute.hellbender.utils.genotyper.ReadLikelihoods;
-import org.broadinstitute.hellbender.utils.genotyper.SampleList;
+import org.broadinstitute.hellbender.utils.genotyper.*;
 import org.broadinstitute.hellbender.utils.haplotype.EventMap;
 import org.broadinstitute.hellbender.utils.haplotype.Haplotype;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
@@ -112,7 +109,7 @@ public class HaplotypeCallerGenotypingEngine extends GenotypingEngine<StandardCa
      *
      */
     public CalledHaplotypes assignGenotypeLikelihoods(final List<Haplotype> haplotypes,
-                                                      final ReadLikelihoods<Haplotype> readLikelihoods,
+                                                      final AlleleLikelihoods<GATKRead, Haplotype> readLikelihoods,
                                                       final Map<String, List<GATKRead>> perSampleFilteredReadList,
                                                       final byte[] ref,
                                                       final SimpleInterval refLoc,
@@ -180,7 +177,7 @@ public class HaplotypeCallerGenotypingEngine extends GenotypingEngine<StandardCa
 
             mergedVC = removeAltAllelesIfTooManyGenotypes(ploidy, alleleMapper, mergedVC);
 
-            ReadLikelihoods<Allele> readAlleleLikelihoods = readLikelihoods.marginalize(alleleMapper, new SimpleInterval(mergedVC).expandWithinContig(ALLELE_EXTENSION, header.getSequenceDictionary()));
+            AlleleLikelihoods<GATKRead, Allele> readAlleleLikelihoods = readLikelihoods.marginalize(alleleMapper, new SimpleInterval(mergedVC).expandWithinContig(ALLELE_EXTENSION, header.getSequenceDictionary()));
             if (configuration.isSampleContaminationPresent()) {
                 readAlleleLikelihoods.contaminationDownsampling(configuration.getSampleContamination());
             }
@@ -365,7 +362,7 @@ public class HaplotypeCallerGenotypingEngine extends GenotypingEngine<StandardCa
         return vcb.make();
     }
 
-    protected VariantContext makeAnnotatedCall(byte[] ref, SimpleInterval refLoc, FeatureContext tracker, SAMFileHeader header, VariantContext mergedVC, ReadLikelihoods<Allele> readAlleleLikelihoods, VariantContext call) {
+    protected VariantContext makeAnnotatedCall(byte[] ref, SimpleInterval refLoc, FeatureContext tracker, SAMFileHeader header, VariantContext mergedVC, AlleleLikelihoods<GATKRead, Allele> readAlleleLikelihoods, VariantContext call) {
         final SimpleInterval locus = new SimpleInterval(mergedVC.getContig(), mergedVC.getStart(), mergedVC.getEnd());
         final SimpleInterval refLocInterval= new SimpleInterval(refLoc);
         final ReferenceDataSource refData = new ReferenceMemorySource(new ReferenceBases(ref, refLocInterval), header.getSequenceDictionary());
@@ -382,7 +379,7 @@ public class HaplotypeCallerGenotypingEngine extends GenotypingEngine<StandardCa
      * @param mergedVC               Input VC with event to genotype
      * @return                       GenotypesContext object wrapping genotype objects with PLs
      */
-    protected GenotypesContext calculateGLsForThisEvent(final ReadLikelihoods<Allele> readLikelihoods, final VariantContext mergedVC, final List<Allele> noCallAlleles ) {
+    protected GenotypesContext calculateGLsForThisEvent(final AlleleLikelihoods<GATKRead, Allele> readLikelihoods, final VariantContext mergedVC, final List<Allele> noCallAlleles ) {
         Utils.nonNull(readLikelihoods, "readLikelihoods");
         Utils.nonNull(mergedVC, "mergedVC");
         final List<Allele> vcAlleles = mergedVC.getAlleles();
@@ -449,15 +446,15 @@ public class HaplotypeCallerGenotypingEngine extends GenotypingEngine<StandardCa
 
     // Builds the read-likelihoods collection to use for annotation considering user arguments and the collection
     // used for genotyping.
-    private ReadLikelihoods<Allele> prepareReadAlleleLikelihoodsForAnnotation(
-            final ReadLikelihoods<Haplotype> readHaplotypeLikelihoods,
+    private AlleleLikelihoods<GATKRead, Allele> prepareReadAlleleLikelihoodsForAnnotation(
+            final AlleleLikelihoods<GATKRead, Haplotype> readHaplotypeLikelihoods,
             final Map<String, List<GATKRead>> perSampleFilteredReadList,
             final boolean emitReferenceConfidence,
             final Map<Allele, List<Haplotype>> alleleMapper,
-            final ReadLikelihoods<Allele> readAlleleLikelihoodsForGenotyping,
+            final AlleleLikelihoods<GATKRead, Allele> readAlleleLikelihoodsForGenotyping,
             final VariantContext call) {
 
-        final ReadLikelihoods<Allele> readAlleleLikelihoodsForAnnotations;
+        final AlleleLikelihoods<GATKRead, Allele> readAlleleLikelihoodsForAnnotations;
         final SimpleInterval loc = new SimpleInterval(call);
 
         // We can reuse for annotation the likelihood for genotyping as long as there is no contamination filtering

@@ -9,8 +9,9 @@ import org.broadinstitute.barclay.help.DocumentedFeature;
 import org.broadinstitute.hellbender.engine.ReferenceContext;
 import org.broadinstitute.hellbender.utils.MathUtils;
 import org.broadinstitute.hellbender.utils.Utils;
-import org.broadinstitute.hellbender.utils.genotyper.ReadLikelihoods;
+import org.broadinstitute.hellbender.utils.genotyper.AlleleLikelihoods;
 import org.broadinstitute.hellbender.utils.help.HelpConstants;
+import org.broadinstitute.hellbender.utils.read.GATKRead;
 import org.broadinstitute.hellbender.utils.variant.GATKVCFConstants;
 
 import java.util.Collections;
@@ -54,7 +55,7 @@ public final class QualByDepth extends InfoFieldAnnotation implements StandardAn
     @Override
     public Map<String, Object> annotate(final ReferenceContext ref,
                                         final VariantContext vc,
-                                        final ReadLikelihoods<Allele> likelihoods) {
+                                        final AlleleLikelihoods<GATKRead, Allele> likelihoods) {
         Utils.nonNull(vc);
         if ( !vc.hasLog10PError() ) {
             return Collections.emptyMap();
@@ -97,7 +98,7 @@ public final class QualByDepth extends InfoFieldAnnotation implements StandardAn
         }
     }
 
-    public static int getDepth(final GenotypesContext genotypes, final ReadLikelihoods<Allele> likelihoods) {
+    public static int getDepth(final GenotypesContext genotypes, final AlleleLikelihoods<GATKRead, Allele> likelihoods) {
         int depth = 0;
         int ADrestrictedDepth = 0;
 

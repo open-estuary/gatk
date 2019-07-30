@@ -15,14 +15,14 @@ import java.util.Random;
 public final class RandomLikelihoodCalculationEngine implements ReadLikelihoodCalculationEngine {
 
     @Override
-    public ReadLikelihoods<Haplotype> computeReadLikelihoods(final AssemblyResultSet assemblyResultSet,
+    public AlleleLikelihoods<GATKRead, Haplotype> computeReadLikelihoods(final AssemblyResultSet assemblyResultSet,
                                                   final SampleList samples,
                                                   final Map<String, List<GATKRead>> reads) {
         Utils.nonNull(assemblyResultSet, "assemblyResultSet is null");
         Utils.nonNull(samples, "samples is null");
         Utils.nonNull(reads, "perSampleReadList is null");
         final AlleleList<Haplotype> haplotypes = new IndexedAlleleList<>(assemblyResultSet.getHaplotypeList());
-        final ReadLikelihoods<Haplotype> result = new ReadLikelihoods<>(samples, haplotypes, reads);
+        final AlleleLikelihoods<GATKRead, Haplotype> result = new AlleleLikelihoods<>(samples, haplotypes, reads);
         final Random rnd = Utils.getRandomGenerator();
         final int sampleCount = samples.numberOfSamples();
         final int alleleCount = haplotypes.numberOfAlleles();

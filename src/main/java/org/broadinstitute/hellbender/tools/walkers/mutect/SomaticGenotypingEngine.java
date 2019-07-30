@@ -23,6 +23,7 @@ import org.broadinstitute.hellbender.utils.genotyper.*;
 import org.broadinstitute.hellbender.utils.haplotype.EventMap;
 import org.broadinstitute.hellbender.utils.haplotype.Haplotype;
 import org.broadinstitute.hellbender.utils.read.Fragment;
+import org.broadinstitute.hellbender.utils.read.GATKRead;
 import org.broadinstitute.hellbender.utils.variant.GATKVCFConstants;
 import org.broadinstitute.hellbender.utils.variant.GATKVariantContextUtils;
 
@@ -57,7 +58,7 @@ public class SomaticGenotypingEngine {
      * @return                                       A CalledHaplotypes object containing a list of VC's with genotyped events and called haplotypes
      */
     public CalledHaplotypes callMutations(
-            final ReadLikelihoods<Haplotype> logReadLikelihoods,
+            final AlleleLikelihoods<GATKRead, Haplotype> logReadLikelihoods,
             final AssemblyResultSet assemblyResultSet,
             final ReferenceContext referenceContext,
             final SimpleInterval activeRegionWindow,
@@ -92,11 +93,10 @@ public class SomaticGenotypingEngine {
             }
         }
 
-        final AlleleLikelihoods<Fragment, Haplotype> logFragmentLikelihoods = logReadLikelihoods.combineMates();
-
         if (MTAC.likelihoodArgs.phredScaledGlobalReadMismappingRate > 0) {
-            logFragmentLikelihoods.normalizeLikelihoods(NaturalLogUtils.qualToLogErrorProb(MTAC.likelihoodArgs.phredScaledGlobalReadMismappingRate));
+            logReadLikelihoods.normalizeLikelihoods(NaturalLogUtils.qualToLogErrorProb(MTAC.likelihoodArgs.phredScaledGlobalReadMismappingRate));
         }
+        final AlleleLikelihoods<GroupedEvidence<GATKRead>, Haplotype> logFragmentLikelihoods = logReadLikelihoods.groupEvidence(GATKRead::getName);
 
         for( final int loc : startPosKeySet ) {
             final List<VariantContext> eventsAtThisLoc = AssemblyBasedCallerUtils.getVariantContextsFromActiveHaplotypes(loc, haplotypes, false);
@@ -105,31 +105,30 @@ public class SomaticGenotypingEngine {
                 continue;
             }
 
-            // converting ReadLikelihoods<Haplotype> to ReadLikelihoods<Allele>
+            // converting haplotype likelihoods to allele likelihoods
             final Map<Allele, List<Haplotype>> alleleMapper = AssemblyBasedCallerUtils.createAlleleMapper(mergedVC, loc, haplotypes, null);
-            final AlleleLikelihoods<Fragment, Allele> logLikelihoods = logFragmentLikelihoods.marginalize(alleleMapper,
+            final AlleleLikelihoods<GroupedEvidence<GATKRead>, Allele> logLikelihoods = logFragmentLikelihoods.marginalize(alleleMapper,
                     new SimpleInterval(mergedVC).expandWithinContig(HaplotypeCallerGenotypingEngine.ALLELE_EXTENSION, header.getSequenceDictionary()));
 
             if (emitRefConf) {
                 mergedVC = ReferenceConfidenceUtils.addNonRefSymbolicAllele(mergedVC);
                 logLikelihoods.addNonReferenceAllele(Allele.NON_REF_ALLELE);
             }
-            final List<LikelihoodMatrix<Fragment, Allele>> tumorMatrices = IntStream.range(0, logLikelihoods.numberOfSamples())
+            final List<LikelihoodMatrix<GroupedEvidence<GATKRead>, Allele>> tumorMatrices = IntStream.range(0, logLikelihoods.numberOfSamples())
                     .filter(n -> !normalSamples.contains(logLikelihoods.getSample(n)))
                     .mapToObj(logLikelihoods::sampleMatrix)
                     .collect(Collectors.toList());
             final AlleleList<Allele> alleleList = tumorMatrices.get(0);
-            final LikelihoodMatrix<Fragment, Allele> logTumorMatrix = combinedLikelihoodMatrix(tumorMatrices, alleleList);
+            final LikelihoodMatrix<GroupedEvidence<GATKRead>, Allele> logTumorMatrix = combinedLikelihoodMatrix(tumorMatrices, alleleList);
             final PerAlleleCollection<Double> tumorLogOdds = somaticLogOdds(logTumorMatrix);
 
-            final List<LikelihoodMatrix<Fragment, Allele>> normalMatrices = IntStream.range(0, logLikelihoods.numberOfSamples())
+            final List<LikelihoodMatrix<GroupedEvidence<GATKRead>, Allele>> normalMatrices = IntStream.range(0, logLikelihoods.numberOfSamples())
                     .filter(n -> normalSamples.contains(logLikelihoods.getSample(n)))
                     .mapToObj(logLikelihoods::sampleMatrix)
                     .collect(Collectors.toList());
-            final LikelihoodMatrix<Fragment, Allele> logNormalMatrix = combinedLikelihoodMatrix(normalMatrices, alleleList);
+            final LikelihoodMatrix<GroupedEvidence<GATKRead>, Allele> logNormalMatrix = combinedLikelihoodMatrix(normalMatrices, alleleList);
             final PerAlleleCollection<Double> normalLogOdds = diploidAltLogOdds(logNormalMatrix);
             final PerAlleleCollection<Double> normalArtifactLogOdds = somaticLogOdds(logNormalMatrix);
-
 
             final Set<Allele> forcedAlleles = getAllelesConsistentWithGivenAlleles(givenAlleles, loc, mergedVC);
             final List<Allele> tumorAltAlleles = mergedVC.getAlternateAlleles().stream()
@@ -174,22 +173,22 @@ public class SomaticGenotypingEngine {
             final List<Allele> untrimmedAlleles = call.getAlleles();
             final Map<Allele, List<Allele>> trimmedToUntrimmedAlleleMap = IntStream.range(0, trimmedCall.getNAlleles()).boxed()
                     .collect(Collectors.toMap(n -> trimmedAlleles.get(n), n -> Arrays.asList(untrimmedAlleles.get(n))));
-            final AlleleLikelihoods<Fragment, Allele> trimmedLikelihoods = logLikelihoods.marginalize(trimmedToUntrimmedAlleleMap);
+            final AlleleLikelihoods<GroupedEvidence<GATKRead>, Allele> trimmedLikelihoods = logLikelihoods.marginalize(trimmedToUntrimmedAlleleMap);
 
-            // ReadLikelihoods for annotation only
-            final ReadLikelihoods<Allele> logReadAlleleLikelihoods = logReadLikelihoods.marginalize(alleleMapper,
+            // AlleleLikelihoods for annotation only
+            final AlleleLikelihoods<GATKRead, Allele> logReadAlleleLikelihoods = logReadLikelihoods.marginalize(alleleMapper,
                     new SimpleInterval(mergedVC).expandWithinContig(HaplotypeCallerGenotypingEngine.ALLELE_EXTENSION, header.getSequenceDictionary()));
 
             if (emitRefConf) {
                 logReadAlleleLikelihoods.addNonReferenceAllele(Allele.NON_REF_ALLELE);
             }
 
-            final ReadLikelihoods<Allele> trimmedLikelihoodsForAnnotation = logReadAlleleLikelihoods.marginalize(trimmedToUntrimmedAlleleMap);
+            final AlleleLikelihoods<GATKRead, Allele> trimmedLikelihoodsForAnnotation = logReadAlleleLikelihoods.marginalize(trimmedToUntrimmedAlleleMap);
 
 
             final VariantContext annotatedCall =  annotationEngine.annotateContext(trimmedCall, featureContext, referenceContext, trimmedLikelihoodsForAnnotation, a -> true);
             if(withBamOut) {
-                AssemblyBasedCallerUtils.annotateReadLikelihoodsWithSupportedAlleles(trimmedCall, trimmedLikelihoods);
+                AssemblyBasedCallerUtils.annotateReadLikelihoodsWithSupportedAlleles(trimmedCall, trimmedLikelihoods, GroupedEvidence::new);
             }
 
             call.getAlleles().stream().map(alleleMapper::get).filter(Objects::nonNull).forEach(calledHaplotypes::addAll);

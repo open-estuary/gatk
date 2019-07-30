@@ -9,9 +9,9 @@ import htsjdk.samtools.util.Locatable;
 import java.nio.file.Path;
 
 import org.broadinstitute.hellbender.tools.walkers.haplotypecaller.AssemblyBasedCallerUtils;
+import org.broadinstitute.hellbender.utils.genotyper.AlleleLikelihoods;
 import org.broadinstitute.hellbender.utils.read.*;
 import org.broadinstitute.hellbender.utils.Utils;
-import org.broadinstitute.hellbender.utils.genotyper.ReadLikelihoods;
 
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -118,7 +118,7 @@ public class HaplotypeBAMWriter implements AutoCloseable {
                                               final Locatable paddedReferenceLoc,
                                               final Collection<Haplotype> bestHaplotypes,
                                               final Set<Haplotype> calledHaplotypes,
-                                              final ReadLikelihoods<Haplotype> readLikelihoods,
+                                              final AlleleLikelihoods<GATKRead, Haplotype> readLikelihoods,
                                               final Locatable callableRegion) {
 
         Utils.nonNull(haplotypes, "haplotypes cannot be null");
@@ -149,7 +149,7 @@ public class HaplotypeBAMWriter implements AutoCloseable {
                                               final Locatable paddedReferenceLoc,
                                               final Collection<Haplotype> bestHaplotypes,
                                               final Set<Haplotype> calledHaplotypes,
-                                              final ReadLikelihoods<Haplotype> readLikelihoods) {
+                                              final AlleleLikelihoods<GATKRead, Haplotype> readLikelihoods) {
         writeReadsAlignedToHaplotypes(haplotypes, paddedReferenceLoc, bestHaplotypes, calledHaplotypes, readLikelihoods, null);
     }
 

@@ -12,10 +12,12 @@ import org.broadinstitute.hellbender.utils.IndexRange;
 import org.broadinstitute.hellbender.utils.MathUtils;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.Utils;
+import org.broadinstitute.hellbender.utils.downsampling.AlleleBiasedDownsamplingUtils;
 import org.broadinstitute.hellbender.utils.pileup.PileupElement;
 
 import java.util.*;
 import java.util.function.Function;
+import java.util.function.ToDoubleFunction;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -83,7 +85,7 @@ public class AlleleLikelihoods<EVIDENCE extends Locatable, A extends Allele> imp
      * <p>In order to save CPU time the indices contained in this array (not the array itself) is
      * lazily initialized by invoking {@link #evidenceIndexBySampleIndex(int)}.</p>
      */
-    protected final Object2IntMap<EVIDENCE>[] evidenceIndexBySampleIndex;
+    protected final List<Object2IntMap<EVIDENCE>> evidenceIndexBySampleIndex;
 
     /**
      * Index of the reference allele if any, otherwise {@link #MISSING_REF}.
@@ -142,7 +144,7 @@ public class AlleleLikelihoods<EVIDENCE extends Locatable, A extends Allele> imp
         valuesBySampleIndex = new double[sampleCount][][];
         referenceAlleleIndex = findReferenceAllele(alleles);
 
-        evidenceIndexBySampleIndex = new Object2IntMap[sampleCount];
+        evidenceIndexBySampleIndex = new ArrayList<>(Collections.nCopies(sampleCount, null));
 
         setupIndexes(evidenceBySample, sampleCount, alleleCount);
 
@@ -155,15 +157,14 @@ public class AlleleLikelihoods<EVIDENCE extends Locatable, A extends Allele> imp
     AlleleLikelihoods(final AlleleList alleles,
                       final SampleList samples,
                       final List<List<EVIDENCE>> evidenceBySampleIndex,
-                      final Object2IntMap<EVIDENCE>[] evidenceIndex,
                       final double[][][] values) {
         this.samples = samples;
         this.alleles = alleles;
         this.evidenceBySampleIndex = evidenceBySampleIndex;
         this.valuesBySampleIndex = values;
-        this.evidenceIndexBySampleIndex = evidenceIndex;
         final int sampleCount = samples.numberOfSamples();
         this.evidenceListBySampleIndex = (List<EVIDENCE>[])new List[sampleCount];
+        evidenceIndexBySampleIndex = new ArrayList<>(Collections.nCopies(sampleCount, null));
 
         referenceAlleleIndex = findReferenceAllele(alleles);
         sampleMatrices = (LikelihoodMatrix<EVIDENCE,A>[]) new LikelihoodMatrix[sampleCount];
@@ -294,6 +295,44 @@ public class AlleleLikelihoods<EVIDENCE extends Locatable, A extends Allele> imp
             return sampleMatrices[sampleIndex] = new SampleMatrix(sampleIndex);
         } else {
             return extantResult;
+        }
+    }
+
+    public void switchToNaturalLog() {
+        final double conversionFactor = Math.log(10);
+        final int sampleCount = samples.numberOfSamples();
+        final int alleleCount = alleles.numberOfAlleles();
+
+        for (int s = 0; s < sampleCount; s++) {
+            for (int a = 0; a < alleleCount; a++) {
+                MathUtils.applyToArrayInPlace(valuesBySampleIndex[s][a], x -> x * conversionFactor);
+            }
+        }
+        isNaturalLog = true;
+    }
+
+    /**
+     * Downsamples reads based on contamination fractions making sure that all alleles are affected proportionally.
+     *
+     * @param perSampleDownsamplingFraction contamination sample map where the sample name are the keys and the
+     *                                       fractions are the values.
+     *
+     * @throws IllegalArgumentException if {@code perSampleDownsamplingFraction} is {@code null}.
+     */
+    public void contaminationDownsampling(final Map<String, Double> perSampleDownsamplingFraction) {
+        Utils.nonNull(perSampleDownsamplingFraction);
+
+        final int alleleCount = alleles.numberOfAlleles();
+        for (int s = 0; s < samples.numberOfSamples(); s++) {
+            final double fraction = perSampleDownsamplingFraction.getOrDefault(samples.getSample(s), 0.0);
+            if (Double.isNaN(fraction) || fraction <= 0.0) {
+                continue;
+            }
+
+            final Map<A, List<EVIDENCE>> alleleEvidenceMap = evidenceByBestAlleleMap(s);
+            final Collection<EVIDENCE> evidenceToRemove = fraction >= 1 ? evidenceBySampleIndex.get(s) :
+                    AlleleBiasedDownsamplingUtils.selectAlleleBiasedEvidence(alleleEvidenceMap, fraction);
+            removeSampleEvidence(s, evidenceToRemove, alleleCount);
         }
     }
 
@@ -459,7 +498,7 @@ public class AlleleLikelihoods<EVIDENCE extends Locatable, A extends Allele> imp
         final int sampleCount = samples.numberOfSamples();
         for (int s = 0; s < sampleCount; s++) {
             final List<EVIDENCE> sampleEvidence = evidenceBySampleIndex.get(s);
-            final Object2IntMap<EVIDENCE> evidenceIndex = evidenceIndexBySampleIndex[s];
+            final Object2IntMap<EVIDENCE> evidenceIndex = evidenceIndexBySampleIndex.get(s);
             final int sampleEvidenceCount = sampleEvidence.size();
             for (int r = 0; r < sampleEvidenceCount; r++) {
                 final EVIDENCE evidence = sampleEvidence.get(r);
@@ -537,6 +576,50 @@ public class AlleleLikelihoods<EVIDENCE extends Locatable, A extends Allele> imp
     }
 
     /**
+     * Group evidence into lists of evidence -- for example group by read name to force read pairs to support a single haplotype
+     * @return
+     */
+    public <U> AlleleLikelihoods<GroupedEvidence<EVIDENCE>, A> groupEvidence(final Function<EVIDENCE, U> groupingFunction) {
+        final int sampleCount = samples.numberOfSamples();
+        final double[][][] newLikelihoodValues = new double[sampleCount][][];
+        final int alleleCount = alleles.numberOfAlleles();
+
+        final List<List<GroupedEvidence<EVIDENCE>>> groupsBySampleIndex = new ArrayList<>(sampleCount);
+
+        for (int s = 0; s < sampleCount; s++) {
+            final List<GroupedEvidence<EVIDENCE>> evidenceGroups = sampleEvidence(s).stream().collect(Collectors.groupingBy(groupingFunction))
+                    .values().stream().map(GroupedEvidence<EVIDENCE>::new).collect(Collectors.toList());
+
+
+            final int sampleGroupedEvidenceCount = evidenceGroups.size();
+
+            final double[][] oldSampleValues = valuesBySampleIndex[s];
+            final double[][] newSampleValues = newLikelihoodValues[s] = new double[alleleCount][sampleGroupedEvidenceCount];
+
+            // For each old allele and read we update the new table keeping the maximum likelihood.
+            for (int f = 0; f < sampleGroupedEvidenceCount; f++) {
+                for (int a = 0; a < alleleCount; a++) {
+                    for (final EVIDENCE evidence : evidenceGroups.get(f)) {
+                        final int oldReadIndex = evidenceIndex(s, evidence);
+                        newSampleValues[a][f] += oldSampleValues[a][oldReadIndex];
+                    }
+                }
+            }
+            groupsBySampleIndex.add(evidenceGroups);
+        }
+
+        // Finally we create the new read-likelihood
+        final AlleleLikelihoods<GroupedEvidence<EVIDENCE>, A> result = new AlleleLikelihoods<GroupedEvidence<EVIDENCE>, A>(
+                alleles,
+                samples,
+                groupsBySampleIndex,
+                newLikelihoodValues);
+
+        result.isNaturalLog = this.isNaturalLog;
+        return result;
+    }
+
+    /**
      * Perform marginalization from an allele set to another (smaller one) taking the maximum value
      * for each evidence in the original allele subset.
      *
@@ -566,7 +649,6 @@ public class AlleleLikelihoods<EVIDENCE extends Locatable, A extends Allele> imp
 
         final int sampleCount = samples.numberOfSamples();
 
-        final Object2IntMap<EVIDENCE>[] newEvidenceIndexBySampleIndex = new Object2IntMap[sampleCount];
         final List<List<EVIDENCE>> newEvidenceBySampleIndex = new ArrayList<>(sampleCount);
 
         for (int s = 0; s < sampleCount; s++) {
@@ -578,7 +660,7 @@ public class AlleleLikelihoods<EVIDENCE extends Locatable, A extends Allele> imp
                 new IndexedAlleleList(newAlleles),
                 samples,
                 newEvidenceBySampleIndex,
-                newEvidenceIndexBySampleIndex, newLikelihoodValues);
+                newLikelihoodValues);
         result.isNaturalLog = isNaturalLog;
         return result;
     }
@@ -622,7 +704,6 @@ public class AlleleLikelihoods<EVIDENCE extends Locatable, A extends Allele> imp
         final int sampleCount = samples.numberOfSamples();
 
         @SuppressWarnings({"rawtypes","unchecked"})
-        final Object2IntMap<EVIDENCE>[] newEvidenceIndexBySampleIndex = (Object2IntMap<EVIDENCE>[])new Object2IntMap[sampleCount];
         final List<List<EVIDENCE>> newEvidenceBySampleIndex = new ArrayList<>(sampleCount);
 
         for (int s = 0; s < sampleCount; s++) {
@@ -639,7 +720,7 @@ public class AlleleLikelihoods<EVIDENCE extends Locatable, A extends Allele> imp
         // Finally we create the new evidence-likelihood
         final AlleleLikelihoods<EVIDENCE, B> result = new AlleleLikelihoods<>(new IndexedAlleleList<>(newAlleles), samples,
                 newEvidenceBySampleIndex,
-                newEvidenceIndexBySampleIndex, newLikelihoodValues);
+                newLikelihoodValues);
         result.isNaturalLog = isNaturalLog;
         return result;
     }
@@ -780,7 +861,7 @@ public class AlleleLikelihoods<EVIDENCE extends Locatable, A extends Allele> imp
 
         evidenceBySampleIndex.get(sampleIndex).addAll(newSampleEvidence);
 
-        final Object2IntMap<EVIDENCE> sampleEvidenceIndex = evidenceIndexBySampleIndex[sampleIndex];
+        final Object2IntMap<EVIDENCE> sampleEvidenceIndex = evidenceIndexBySampleIndex.get(sampleIndex);
         for (final EVIDENCE newEvidence : newSampleEvidence) {
             //    if (sampleEvidenceIndex.containsKey(newEvidence)) // might be worth handle this without exception (ignore the evidence?) but in practice should never be the case.
             //        throw new IllegalArgumentException("you cannot add evidence already in evidence-likelihood collection");
@@ -944,7 +1025,6 @@ public class AlleleLikelihoods<EVIDENCE extends Locatable, A extends Allele> imp
         return bestAllelesBreakingTies(sampleIndex, a -> a.isReference() ? 1.0 : 0);
     }
 
-
     /**
      * Returns evidence stratified by best allele.
      * @param sampleIndex the target sample.
@@ -1011,8 +1091,6 @@ public class AlleleLikelihoods<EVIDENCE extends Locatable, A extends Allele> imp
 
     /**
      * Returns the total count of evidence in the evidence-likelihood collection.
-     *
-     * @return never {@code null}
      */
     public int evidenceCount() {
         return evidenceBySampleIndex.stream().mapToInt(List::size).sum();
@@ -1053,6 +1131,18 @@ public class AlleleLikelihoods<EVIDENCE extends Locatable, A extends Allele> imp
                     .collect(Collectors.toList());
             removeSampleEvidence(s, evidenceToRemove, alleleCount);
         }
+    }
+
+    protected double maximumLikelihoodOverAllAlleles(final int sampleIndex, final int evidenceIndex) {
+        double result = Double.NEGATIVE_INFINITY;
+        final int alleleCount = alleles.numberOfAlleles();
+        final double[][] sampleValues = valuesBySampleIndex[sampleIndex];
+        for (int a = 0; a < alleleCount; a++) {
+            if (sampleValues[a][evidenceIndex] > result) {
+                result = sampleValues[a][evidenceIndex];
+            }
+        }
+        return result;
     }
 
     /**
@@ -1136,17 +1226,43 @@ public class AlleleLikelihoods<EVIDENCE extends Locatable, A extends Allele> imp
         evidenceListBySampleIndex[sampleIndex] = null; // reset the unmodifiable list.
     }
 
+    /**
+     * Removes those read that the best possible likelihood given any allele is just too low.
+     *
+     * <p>
+     *     This is determined by a maximum error per read-base against the best likelihood possible.
+     * </p>
+     *
+     * @param log10MinTrueLikelihood Function that returns the minimum likelihood that the best allele for a unit of evidence must have
+     * @throws IllegalStateException is not supported for read-likelihood that do not contain alleles.
+     *
+     * @throws IllegalArgumentException if {@code maximumErrorPerBase} is negative.
+     */
+    public void filterPoorlyModeledEvidence(final ToDoubleFunction<EVIDENCE> log10MinTrueLikelihood) {
+        Utils.validateArg(alleles.numberOfAlleles() > 0, "unsupported for read-likelihood collections with no alleles");
+
+        new IndexRange(0, samples.numberOfSamples()).forEach(s -> {
+            final List<EVIDENCE> sampleEvidence = evidenceBySampleIndex.get(s);
+            final List<EVIDENCE> evidenceToRemove = IntStream.range(0, sampleEvidence.size())
+                    .filter(e -> maximumLikelihoodOverAllAlleles(s, e) < log10MinTrueLikelihood.applyAsDouble(sampleEvidence.get(e)))
+                    .mapToObj(sampleEvidence::get)
+                    .collect(Collectors.toList());
+
+            removeSampleEvidence(s, evidenceToRemove, alleles.numberOfAlleles());
+        });
+    }
+
 
     private Object2IntMap<EVIDENCE> evidenceIndexBySampleIndex(final int sampleIndex) {
-        if (evidenceIndexBySampleIndex[sampleIndex] == null) {
+        if (evidenceIndexBySampleIndex.get(sampleIndex) == null) {
             final List<EVIDENCE> sampleEvidence = evidenceBySampleIndex.get(sampleIndex);
             final int sampleEvidenceCount = sampleEvidence.size();
-            evidenceIndexBySampleIndex[sampleIndex] = new Object2IntOpenHashMap<>(sampleEvidenceCount);
+            evidenceIndexBySampleIndex.set(sampleIndex, new Object2IntOpenHashMap<>(sampleEvidenceCount));
             for (int r = 0; r < sampleEvidenceCount; r++) {
-                evidenceIndexBySampleIndex[sampleIndex].put(sampleEvidence.get(r), r);
+                evidenceIndexBySampleIndex.get(sampleIndex).put(sampleEvidence.get(r), r);
             }
         }
-        return evidenceIndexBySampleIndex[sampleIndex];
+        return evidenceIndexBySampleIndex.get(sampleIndex);
     }
 
 

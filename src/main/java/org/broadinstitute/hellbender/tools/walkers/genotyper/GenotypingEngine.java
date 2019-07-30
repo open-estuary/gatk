@@ -14,9 +14,10 @@ import org.broadinstitute.hellbender.engine.ReferenceContext;
 import org.broadinstitute.hellbender.tools.walkers.annotator.VariantAnnotatorEngine;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.afcalc.*;
 import org.broadinstitute.hellbender.utils.*;
-import org.broadinstitute.hellbender.utils.genotyper.ReadLikelihoods;
+import org.broadinstitute.hellbender.utils.genotyper.AlleleLikelihoods;
 import org.broadinstitute.hellbender.utils.genotyper.SampleList;
 import org.broadinstitute.hellbender.utils.pileup.ReadPileup;
+import org.broadinstitute.hellbender.utils.read.GATKRead;
 import org.broadinstitute.hellbender.utils.variant.GATKVCFConstants;
 import org.broadinstitute.hellbender.utils.variant.GATKVCFHeaderLines;
 import org.broadinstitute.hellbender.utils.variant.GATKVariantContextUtils;
@@ -229,7 +230,7 @@ public abstract class GenotypingEngine<Config extends StandardCallerArgumentColl
                                                     final VariantContext vc,
                                                     final GenotypeLikelihoodsCalculationModel model,
                                                     final boolean inheritAttributesFromInputVC,
-                                                    final ReadLikelihoods<Allele> likelihoods,
+                                                    final AlleleLikelihoods<GATKRead, Allele> likelihoods,
                                                     final SAMFileHeader header) {
         final boolean limitedContext = features == null || refContext == null || rawContext == null || stratifiedContexts == null;
         // if input VC can't be genotyped, exit with either null VCC or, in case where we need to emit all sites, an empty call
@@ -619,7 +620,7 @@ public abstract class GenotypingEngine<Config extends StandardCallerArgumentColl
     protected Map<String,Object> composeCallAttributes(final boolean inheritAttributesFromInputVC, final VariantContext vc,
                                                        final AlignmentContext rawContext, final Map<String, AlignmentContext> stratifiedContexts, final FeatureContext tracker, final ReferenceContext refContext, final List<Integer> alleleCountsofMLE, final boolean bestGuessIsRef,
                                                        final AFCalculationResult AFresult, final List<Allele> allAllelesToUse, final GenotypesContext genotypes,
-                                                       final GenotypeLikelihoodsCalculationModel model, final ReadLikelihoods<Allele> likelihoods) {
+                                                       final GenotypeLikelihoodsCalculationModel model, final AlleleLikelihoods<GATKRead, Allele> likelihoods) {
         final Map<String, Object> attributes = new LinkedHashMap<>();
 
         final boolean limitedContext = tracker == null || refContext == null || rawContext == null || stratifiedContexts == null;
