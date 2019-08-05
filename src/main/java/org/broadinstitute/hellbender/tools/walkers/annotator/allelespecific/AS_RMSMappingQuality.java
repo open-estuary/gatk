@@ -170,6 +170,7 @@ public final class AS_RMSMappingQuality extends InfoFieldAnnotation implements A
 
         final String annotationString = makeFinalizedAnnotationString(vc, myData.getAttributeMap());
         annotations.put(getKeyNames().get(0), annotationString);
+        annotations.put(getRawKeyName(), makeRawAnnotationString(vc.getAlleles(), myData.getAttributeMap()));
         return annotations;
     }
 

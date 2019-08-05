@@ -654,7 +654,7 @@ public abstract class GenotypingEngine<Config extends StandardCallerArgumentColl
                 perAlleleQuals.add(AFresult.getLog10PosteriorOfAFEq0());
             }
 
-            attributes.put(GATKVCFConstants.AS_QUAL_KEY, perAlleleQuals);
+            attributes.put(GATKVCFConstants.AS_QUAL_KEY, perAlleleQuals.stream().mapToInt(q -> (int)Math.round(q * -10)).boxed().collect(Collectors.toList()));
         }
 
         if ( configuration.genotypeArgs.ANNOTATE_NUMBER_OF_ALLELES_DISCOVERED ) {

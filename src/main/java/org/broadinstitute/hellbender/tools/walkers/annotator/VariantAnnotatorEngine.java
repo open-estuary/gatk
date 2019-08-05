@@ -14,6 +14,7 @@ import org.broadinstitute.hellbender.tools.walkers.annotator.allelespecific.Redu
 import org.broadinstitute.hellbender.tools.walkers.annotator.allelespecific.ReducibleAnnotationData;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.genotyper.ReadLikelihoods;
+import org.broadinstitute.hellbender.utils.variant.GATKVCFConstants;
 import org.broadinstitute.hellbender.utils.variant.GATKVariantContextUtils;
 
 import java.util.*;
@@ -233,6 +234,10 @@ public final class VariantAnnotatorEngine {
                     variantAnnotations.remove(currentASannotation.getRawKeyName());
                 }
             }
+        }
+        //until we refactor the allele-specific annotations to have multiple raw keys, we'll do this one manually
+        if (!keepRawCombinedAnnotations) {
+            variantAnnotations.remove(GATKVCFConstants.AS_QUAL_KEY);
         }
 
         // generate a new annotated VC

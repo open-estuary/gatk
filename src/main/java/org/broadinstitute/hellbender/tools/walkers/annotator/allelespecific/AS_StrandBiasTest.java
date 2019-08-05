@@ -162,7 +162,11 @@ public abstract class AS_StrandBiasTest extends StrandBiasTest implements Reduci
         Map<Allele, Double> perAltRankSumResults = calculateReducedData(myData);
 
         String annotationString = makeReducedAnnotationString(vc, perAltRankSumResults);
-        return Collections.singletonMap(getKeyNames().get(0), annotationString);
+        String rawAnnotationsString = makeRawAnnotationString(vc.getAlleles(), myData.getAttributeMap());
+        Map<String, Object> returnMap = new HashMap<>();
+        returnMap.put(getKeyNames().get(0), annotationString);
+        returnMap.put(getRawKeyName(), rawAnnotationsString);
+        return returnMap;
     }
 
     protected void parseRawDataString(ReducibleAnnotationData<List<Integer>> myData) {

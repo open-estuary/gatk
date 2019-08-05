@@ -18,6 +18,7 @@ import org.broadinstitute.hellbender.cmdline.GATKPlugin.GATKAnnotationPluginDesc
 import org.broadinstitute.hellbender.engine.FeatureDataSource;
 import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.tools.walkers.annotator.Annotation;
+import org.broadinstitute.hellbender.tools.walkers.annotator.AnnotationUtils;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.AlleleSubsettingUtils;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeAssignmentMethod;
 import org.broadinstitute.hellbender.utils.MathUtils;
@@ -431,9 +432,14 @@ public final class VariantContextTestUtils {
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    public static void assertAlleleSpecificAnnotationLengthsCorrect(VariantContext actual, String annotation, VCFHeaderLineCount expectedCount) {
-        List<Allele> alleles = actual.getAlleles();
-        String[] actualAnnotation = actual.getAttributeAsString(annotation, "").split("\\|",-1);
+    public static void assertAlleleSpecificAnnotationLengthsCorrect(final VariantContext actual, final String annotation, final VCFHeaderLineCount expectedCount) {
+        assertAlleleSpecificAnnotationLengthsCorrect(actual, annotation, expectedCount, true);
+    }
+
+    public static void assertAlleleSpecificAnnotationLengthsCorrect(final VariantContext actual, final String annotation, final VCFHeaderLineCount expectedCount, final boolean isRawFormat) {
+        final List<Allele> alleles = actual.getAlleles();
+        final String regex = isRawFormat ? AnnotationUtils.ALLELE_SPECIFIC_SPLIT_REGEX : AnnotationUtils.ALLELE_SPECIFIC_REDUCED_DELIM;
+        final String[] actualAnnotation = actual.getAttributeAsString(annotation, "").split(regex,-1);
         Assert.assertEquals(actualAnnotation.length, expectedCount == VCFHeaderLineCount.R ? alleles.size() : alleles.size() - 1);
     }
 

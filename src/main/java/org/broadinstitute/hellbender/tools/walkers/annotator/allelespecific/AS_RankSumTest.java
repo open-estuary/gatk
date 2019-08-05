@@ -4,6 +4,7 @@ import com.google.common.primitives.Doubles;
 import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.GenotypesContext;
 import htsjdk.variant.variantcontext.VariantContext;
+import htsjdk.variant.vcf.VCFConstants;
 import org.apache.commons.lang.ArrayUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -195,6 +196,7 @@ public abstract class AS_RankSumTest extends RankSumTest implements ReducibleAnn
         }
         final String annotationString = makeReducedAnnotationString(vc, perAltRankSumResults);
         annotations.put(getKeyNames().get(0), annotationString);
+        annotations.put(getRawKeyName(), makeCombinedAnnotationString(vc.getAlleles(), myData.getAttributeMap()));
         return annotations;
     }
 
@@ -291,7 +293,8 @@ public abstract class AS_RankSumTest extends RankSumTest implements ReducibleAnn
             if (!perAltRankSumResults.containsKey(a)) {
                 logger.warn("ERROR: VC allele not found in annotation alleles -- maybe there was trimming?");
             } else {
-                annotationString += String.format("%.3f", perAltRankSumResults.get(a));
+                final String perAlleleValue = perAltRankSumResults.get(a) != null ? String.format("%.3f", perAltRankSumResults.get(a)) : VCFConstants.MISSING_VALUE_v4;
+                annotationString += perAlleleValue;
             }
         }
         return annotationString;
