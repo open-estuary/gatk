@@ -113,6 +113,12 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
     @Argument(doc = "minimum number of observations of reported variants", fullName = "min-variant-obs")
     private static long minVariantObservations = 3;
 
+    @Argument(doc = "examine supplemental alignments to find large deletions", fullName = "find-large-deletions")
+    @VisibleForTesting static boolean findLargeDels = false;
+
+    @Argument(doc = "minimum length of supplemental alignment", fullName = "min-alt-length")
+    @VisibleForTesting static int minAltLength = 15;
+
     @Argument(doc = "codon translation (a string of 64 amino acid codes", fullName = "codon-translation")
     private static String codonTranslation = "KNKNTTTTRSRSIIMIQHQHPPPPRRRRLLLLEDEDAAAAGGGGVVVVXYXYSSSSXCWCLFLF";
 
@@ -153,6 +159,8 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
         "TAA", "TAC", "TAG", "TAT", "TCA", "TCC", "TCG", "TCT", "TGA", "TGC", "TGG", "TGT", "TTA", "TTC", "TTG", "TTT"
     };
 
+    private static Logger staticLogger;
+
     @Override
     public boolean requiresReads() {
         return true;
@@ -182,6 +190,7 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
 
     @Override
     public void traverse() {
+        staticLogger = logger;
 
         // ignore non-primary alignments
         final Stream<GATKRead> reads = getTransformedReadStream(ReadFilterLibrary.PRIMARY_LINE);
@@ -744,6 +753,9 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
         public int getStart() { return start; }
         public int getEnd() { return end; }
         public int size() { return end - start; }
+        public int overlapLength( final Interval that ) {
+            return Math.min(this.end, that.end) - Math.max(this.start, that.start);
+        }
 
         @Override
         public boolean equals( final Object obj ) {
@@ -1440,7 +1452,7 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
             // interval.  (note that the trim interval refers to an interval of the read, not the reference.)
             final int readStart = trim.getStart();
             final int readEnd = trim.getEnd();
-            final Cigar cigar = read.getCigar();
+            final Cigar cigar = findLargeDels ? findLargeDeletions(read) : read.getCigar();
             final Iterator<CigarElement> cigarIterator = cigar.getCigarElements().iterator();
             CigarElement cigarElement = cigarIterator.next();
             CigarOperator cigarOperator = cigarElement.getOperator();
@@ -1583,6 +1595,104 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
                 variationCounts.add(newVal);
             }
             return ReportType.CALLED_VARIANT;
+        }
+
+        // try to find a supplemental alignment adjacent to the primary alignment on the read
+        // that is sensible (same strand, same order) and disjoint on the reference.
+        // if there is such a supplemental alignment, combine the primary and supplemental alignments,
+        // adding a large deletion in the middle to represent the missing reference bits.
+        @VisibleForTesting static Cigar findLargeDeletions( final GATKRead read ) {
+            Cigar cigar = read.getCigar();
+            final List<CigarElement> elements = cigar.getCigarElements();
+            final int nElements = elements.size();
+            if ( nElements < 2 ) return cigar;
+            final int initialClipLength = getClipLength(elements.get(0));
+            final int finalClipLength = getClipLength(elements.get(nElements - 1));
+            if ( initialClipLength >= minAltLength || finalClipLength >= minAltLength ) {
+                final String saTag = read.getAttributeAsString("SA");
+                if ( saTag == null ) return cigar;
+                final int readLength = read.getLength();
+                final Interval primaryReadInterval = new Interval(initialClipLength, readLength - finalClipLength);
+                for ( final String alt : saTag.split(";") ) {
+                    final String[] fields = alt.split(",");
+                    if ( fields.length != 6 ) {
+                        staticLogger.warn("Badly formed supplemental alignment: " + alt);
+                        continue;
+                    }
+                    try {
+                        if ( Integer.parseInt(fields[4]) < minMapQ ) continue;
+                    } catch ( final NumberFormatException nfe ) {
+                        staticLogger.warn("Can't get mapQ from supplemental alignment: " + alt);
+                        continue;
+                    }
+                    if ( !(read.isReverseStrand() ? "-" : "+").equals(fields[2]) ) continue;
+                    final Cigar altCigar;
+                    try {
+                        altCigar = TextCigarCodec.decode(fields[3]);
+                    } catch ( final IllegalArgumentException iae ) {
+                        staticLogger.warn("Can't parse cigar in supplemental alignment: " + alt);
+                        continue;
+                    }
+                    final List<CigarElement> altElements = altCigar.getCigarElements();
+                    final int nAltElements = altElements.size();
+                    if ( nAltElements < 2 ) continue;
+                    final int initialAltClipLength = getClipLength(altElements.get(0));
+                    final int finalAltClipLength = getClipLength(altElements.get(nAltElements - 1));
+                    final Interval altReadInterval =
+                            new Interval(initialAltClipLength, readLength - finalAltClipLength);
+                    final int overlapLength = primaryReadInterval.overlapLength(altReadInterval);
+                    if ( Math.abs(overlapLength) <= 2 ) {
+                        final int altRefStart;
+                        try {
+                            altRefStart = Integer.parseInt(fields[1]) - 1;
+                        } catch ( final NumberFormatException nfe ) {
+                            staticLogger.warn("Can't parse starting coordinate from supplement alignment: " + alt);
+                            continue;
+                        }
+                        if ( initialClipLength < initialAltClipLength ) {
+                            final int deletionLength = altRefStart - read.getEnd() + overlapLength;
+                            if ( deletionLength > 2 ) {
+                                cigar = replaceCigar(elements, overlapLength, deletionLength, altElements);
+                                read.setCigar(cigar);
+                                break;
+                            }
+                        } else {
+                            final int deletionLength =
+                                    read.getStart() - 1 - (altRefStart + altCigar.getReferenceLength()) + overlapLength;
+                            if ( deletionLength > 2 ) {
+                                cigar = replaceCigar(altElements, overlapLength, deletionLength, elements);
+                                read.setCigar(cigar);
+                                read.setPosition(read.getContig(), altRefStart + 1);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            return cigar;
+        }
+
+        private static Cigar replaceCigar( final List<CigarElement> elements1, final int overlapLength,
+                                           final int deletionLength, final List<CigarElement> elements2 ) {
+            final int nElements1 = elements1.size();
+            final int nElements2 = elements2.size();
+            final List<CigarElement> cigarElements =
+                    new ArrayList<>(nElements1 + nElements2 - 1);
+            cigarElements.addAll(elements1.subList(0, nElements1 - 1));
+            cigarElements.add(new CigarElement(deletionLength, CigarOperator.D));
+            if ( overlapLength == 0 ) {
+                cigarElements.addAll(elements2.subList(1, nElements2));
+            } else {
+                final CigarElement firstMatch = elements2.get(1);
+                cigarElements.add(new CigarElement(firstMatch.getLength() - overlapLength, CigarOperator.M));
+                cigarElements.addAll(elements2.subList(2,nElements2));
+            }
+            return new Cigar(cigarElements);
+        }
+
+        private static int getClipLength( final CigarElement element ) {
+            return element.getOperator() == CigarOperator.S ||
+                    element.getOperator() == CigarOperator.H ? element.getLength() : 0;
         }
 
         private static List<Interval> combineCoverage( final ReadReport report1, final ReadReport report2 ) {
